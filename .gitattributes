@@ -1,0 +1,8 @@
+# The repository is LF end to end, on every platform.
+#
+# .githooks/commit-msg is executed by bash on Windows as well as POSIX, and a
+# CRLF shebang is not executable — the hook would fail to run on a fresh clone
+# under the default Windows core.autocrlf=true, silently removing one of the
+# three attribution layers (P0 §4.2) on a platform P0 §5.2 treats as supported
+# rather than assumed.
+* text=auto eol=lf

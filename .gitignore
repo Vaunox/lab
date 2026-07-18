@@ -1,0 +1,31 @@
+# Claude Code — never committed. A committed CLAUDE.md is the loudest signature there is.
+/CLAUDE.md
+/.claude/
+
+# secrets & tokens
+.env
+.env.*
+*.token
+secrets/
+
+# data — never redistributed, never committed
+data/
+*.parquet
+*.jsonl
+!tests/**/*.jsonl
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.mutmut-cache
+dist/
+build/
+*.egg-info/
+
+# os
+.DS_Store
