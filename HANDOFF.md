@@ -189,6 +189,31 @@ piped here, as output. Typed status is a claim; piped status is evidence.*
 **Captured at:** commit `4e474adbec3b68d4ba47fee24cb347b164050ece`
 **Command:** `gh api "repos/Vaunox/lab/branches/main/protection"`
 
+> ### DO NOT REMOVE THIS BLOCK ON A PHASE RESET
+>
+> **The marker below and the JSON block after it are `P0.BOOT.PROTECTION`'s certifying
+> evidence**, cited by the frozen manifest as `certifying_test: HANDOFF.md::piped_gh_api_output`
+> and resolved by `check_manifest._check_evidence_block`. This file is archived and reset at
+> every phase close (see *Scope*, above) — **this block is the one part of it that must be
+> carried across verbatim, every time, forever.** It is not P0 history. It is a live gate input.
+>
+> **The trap, stated so you read the right fix at the moment of contact:** if you have just
+> rewritten this file for a new phase and the `manifest` stage has gone red on
+> `P0.BOOT.PROTECTION`, you deleted this block. **The fix is to restore it.**
+>
+> The fix is **not** to relax `check_manifest`, and it is **not** to edit or delete the manifest
+> row — that row lives in a frozen deep dive, editing it in a code PR fails `check_spec_isolation`
+> (§11.1), and it is exactly the "cheapest way to pass a manifest gate is to edit the manifest"
+> move that §8 exists to refuse. A branch-protection claim with its evidence removed is a typed
+> status, not a piped one (§12.1).
+>
+> Keep prose out of the fenced block, and do not put a fenced `json` block between the marker and
+> the evidence: `_check_evidence_block` grades the **first** JSON block following the marker.
+> A note placed *above* the marker, like this one, cannot affect the match at all.
+>
+> The durable copy of this warning is in `PROJECT_STATE.md`, "Blocked / needs a decision", which
+> is never reset — read it if this note has already been lost.
+
 <!-- piped_gh_api_output -->
 
 ```json
