@@ -23,6 +23,7 @@ from pathlib import Path
 
 import check_manifest
 import check_no_stubs
+import check_spec_isolation
 import pytest
 
 from tests.completeness.registry import CHECKERS, FIXTURE_ROOT, REPO_ROOT, Checker
@@ -405,3 +406,94 @@ def test_stubs_refuses_to_run_on_a_tree_with_nothing_to_scan(tmp_path: Path) -> 
     """
     with pytest.raises(check_no_stubs.StubCheckError):
         check_no_stubs.scan(tmp_path)
+
+
+# --------------------------------------------------------------------------
+# check_spec_isolation
+# --------------------------------------------------------------------------
+
+
+def test_spec_isolation_rejects_mixed_pr() -> None:
+    """Failure case 11: a PR touching CONSTITUTION.md and src/ together."""
+    report = check_spec_isolation.check(FIXTURE_ROOT / "spec_isolation")
+
+    assert report.mixed
+    assert not report.ok
+    assert "CONSTITUTION.md" in report.spec
+    assert "docs/deep_dives/P0_scaffold.md" in report.spec
+    assert "src/lab/core/config.py" in report.code
+
+
+def test_spec_isolation_allows_handoff_with_code() -> None:
+    """Failure case 12, and the carve-out section 8 insists on.
+
+    The logs are not a courtesy exemption. `HANDOFF.md` is *required* to travel
+    with the code it describes, so a checker that blocks it makes the
+    session-end ritual unmergeable -- and a ritual that cannot be merged stops
+    being performed.
+    """
+    report = check_spec_isolation.check(FIXTURE_ROOT / "spec_isolation_logs")
+
+    assert report.ok
+    assert not report.mixed
+    assert set(report.logs) == set(check_spec_isolation.LOG_PATHS)
+    assert report.code, "the control is vacuous if it carries no code"
+
+
+def test_spec_isolation_classifies_by_prefix_not_substring() -> None:
+    """A fixture is not a governance document because of where it sits.
+
+    The planted trees live at
+    `tests/completeness/fixtures/*/docs/deep_dives/*.md`. Under substring
+    matching every one of them classifies as SPEC, and every commit touching a
+    fixture reports as a spec-and-code violation. The rule would be switched off
+    within a day. Pinned as a test because the two implementations differ on
+    nothing else.
+    """
+    report = check_spec_isolation.classify(
+        [
+            "tests/completeness/fixtures/manifest/docs/deep_dives/P9_planted.md",
+            "docs/deep_dives/P0_scaffold.md",
+        ]
+    )
+
+    assert report.code == ["tests/completeness/fixtures/manifest/docs/deep_dives/P9_planted.md"]
+    assert report.spec == ["docs/deep_dives/P0_scaffold.md"]
+
+
+def test_spec_isolation_bootstrap_exception_is_open_on_this_repo() -> None:
+    """Section 5.4, on the real tree, where the exception is currently load-bearing.
+
+    Session 1 predicted this exception would never have to deploy, reasoning
+    that the phase branch would carry no SPEC at all. Amendments A-001 to A-003
+    edited a frozen deep dive on this branch, so the diff carries SPEC and CODE
+    together and the exception is doing real work. The prediction is recorded as
+    falsified in DEAD_ENDS.md.
+    """
+    report = check_spec_isolation.check(REPO_ROOT)
+
+    assert report.mixed, "expected the P0 branch to carry both tiers"
+    assert report.exception_applies
+    assert report.ok
+
+
+def test_spec_isolation_bootstrap_exception_self_closes() -> None:
+    """The same diff, once origin/main produces the `gate` check, is denied.
+
+    This is the test that proves the exception is narrow rather than permanent.
+    An exception somebody has to remember to switch off is a hole with a
+    reminder attached; this one closes on a condition the repository reaches on
+    its own, and the closing is asserted rather than asserted-about.
+    """
+    permitted = check_spec_isolation.check(REPO_ROOT)
+    denied = check_spec_isolation.check(REPO_ROOT, assume_gate_on_main=True)
+
+    assert permitted.ok
+    assert denied.mixed
+    assert not denied.ok, "the exception did not close; it is permanent, not narrow"
+
+
+def test_spec_isolation_refuses_a_tree_with_no_diff_to_judge(tmp_path: Path) -> None:
+    """No diff is not a clean diff."""
+    with pytest.raises(check_spec_isolation.SpecIsolationError):
+        check_spec_isolation.check(tmp_path)
