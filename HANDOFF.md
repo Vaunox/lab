@@ -49,176 +49,140 @@ Governance docs cannot travel in the same PR as code. **This file is a log, not 
 **Phase:** P0 — Repository, remote, and the enforcement machinery
 **Branch:** `phase/p0-scaffold`
 **Remote:** https://github.com/Vaunox/lab (public)
-**Last commit:** `4e474ad` — *chore: governance, blueprint, and deep dives for P0 and P1*
-**Session:** 1 — bootstrap §3.0–§3.4 **complete**; P0 proper in progress.
+**Last commit:** `9d90afa`
+**Session:** 2 — **every manifest row is built.** The gate is red on one stage, for one
+reason, and that reason is a finding for the operator rather than unbuilt work.
+
+## The state in one paragraph
+
+All 32 manifest rows exist. All seven checkers are built, each with a planted violation
+**and** a negative control, and `test_every_checker_rejects_its_fixture` passes over all
+seven. Nine of the gate's ten stages are green. The tenth — `manifest` — reports exactly
+**six** failures, all of them the same failure: `call_site: required` on a symbol that has
+no honest caller anywhere in P0. **Nothing is stubbed. Nothing was skipped.** The six are
+listed under *Blocking questions*, and they need an operator ruling, not more code.
 
 ## What is done
 
-`[VERIFIED]` **§3.0 Preflight** — passed, no operator action required:
+`[VERIFIED]` **The planted-violation harness** — `tests/completeness/registry.py` +
+`test_every_checker_rejects_its_fixture`. Each of the seven checkers is driven by
+subprocess against a deliberately broken tree under `tests/completeness/fixtures/` and must
+exit non-zero. An unbuilt checker fails the test; it is never skipped.
 
-| Check | Result |
-|---|---|
-| `git --version` | 2.54.0.windows.1 |
-| `gh --version` | 2.94.0 |
-| `gh auth status` | logged in, account `Vaunox`, scopes `gist, read:org, repo, workflow` |
-| Python `>= 3.11` | 3.11.9 (as `python`; `python3` is not a Windows alias — see Surprises) |
-| Remote `lab` free? | yes — `gh repo view Vaunox/lab` → *Could not resolve to a Repository* (§10 case 18 not triggered) |
+`[VERIFIED]` **The registry cannot silently shrink** — `test_checker_registry_matches_manifest`
+derives the expected checker set from the **frozen manifest** and asserts equality with the
+fixture registry. Adding a checker to the manifest now forces a fixture to exist for it.
 
-`[VERIFIED]` **§3.1 Local repository** — `git init -b main`; `core.hooksPath=.githooks` set
-**before** the first commit; commit `4e474ad`, 20 files.
+`[VERIFIED]` **Every checker has a negative control as well as a planted violation.**
+§2.2 asks for proof a checker can fail. A checker that *only* fails is equally vacuous, so
+each ships a clean tree it must accept:
 
-- `CLAUDE.md` and `.claude/` are **absent from the commit** (gitignored, §4.4) — verified against
-  `git diff --cached --name-only` *before* committing, not after.
-- `LICENSE` (Apache-2.0, canonical text, 202 lines / 11358 bytes) and `NOTICE` are **in commit #1**,
-  per the Cold Start requirement and §5.3.
-- Authorship metadata clean (§4.3): author and committer both `Vaunox <nevesia26@gmail.com>`;
-  `%(trailers)` empty; no `Co-Authored-By`, no attribution of any kind.
-- `.githooks/commit-msg` committed mode **100755** (§6.2 requires `kind: script` to be executable).
+| Checker | Planted | Clean control | Certifying tests |
+|---|---|---|---|
+| `check_manifest` | `fixtures/manifest` | `fixtures/manifest_clean` | 6 |
+| `check_no_stubs` | `fixtures/stubs` | `fixtures/stubs_clean` | 7 |
+| `check_spec_isolation` | `fixtures/spec_isolation` | `fixtures/spec_isolation_logs` | 6 |
+| `check_import_graph` | `fixtures/imports` | `fixtures/imports_clean` | 7 |
+| `check_attribution` | `fixtures/attribution` | `fixtures/attribution_clean` | 6 |
+| `check_fixture_provenance` | `fixtures/fixture_provenance` | `fixtures/fixture_provenance_clean` | 5 |
+| `check_substrate_purity` | `fixtures/substrate_purity` | `fixtures/substrate_purity_clean` | 5 |
 
-`[VERIFIED]` **§3.2 Remote** — `gh repo create lab --public --source=. --remote=origin --push`.
-`origin` = https://github.com/Vaunox/lab, `main` pushed and tracking `origin/main`.
+`[VERIFIED]` **`tools/preflight.py`** — probes interpreter names per R-001; stops with the
+verbatim remedy on `gh auth status` failure.
 
-`[VERIFIED]` **§3.3 Protection** — applied and read back. Full `gh api` response is piped verbatim
-into *MACHINE STATE* below, with a field-by-field table against §12's bootstrap gate. All six
-required settings hold, including `enforce_admins.enabled: true`.
+`[VERIFIED]` **`.github/workflows/ci.yml`** — OS matrix (ubuntu · windows · macos) under a
+job named `checks`, plus a **separate non-matrix job named exactly `gate`** that aggregates
+it. See *Surprises* 3: a matrix job called `gate` would have produced three contexts and
+never the bare `gate` branch protection requires.
 
-`[VERIFIED]` **§3.4 Phase branch** — `phase/p0-scaffold` created and checked out. `main` has not
-been committed to since the bootstrap commit and will not be again.
+`[VERIFIED]` **R-004 discharged** — `.githooks/commit-msg` is portable (`grep -ivE`, POSIX,
+no GNU-only `sed -i` or `/Id`), and `test_commit_msg_hook_strips_trailer` **executes** it.
 
-`[VERIFIED]` **Spec amendments A-001 / A-002 / A-003** applied to `P0_scaffold.md` with dated §13
-entries, commit `e435a15`. See *Operator rulings* below.
+`[VERIFIED]` **`src/lab/core/config.py`** (`load_config`, `get_secret`) and
+**`src/lab/core/logging.py`** (`configure`) — layered config, environment-only secrets,
+structured IST-stamped JSON logging with key-name redaction. 13 certifying tests.
 
-`[VERIFIED]` **Scaffold** — `pyproject.toml` (mypy **strict** over `src`, `tools`, `tests`),
-`.pre-commit-config.yaml` (ruff, black, mypy, `check_no_stubs`, `check_attribution`),
-`src/lab/__init__.py`. Commit `d1cabb7`.
-
-`[VERIFIED]` **`tools/check_manifest.py`** — runs, and **validates P0's own manifest**. Tally piped
-into *MACHINE STATE* below. The closed loop closes in both directions (0 uncovered sections, 0
-unspecified rows). `[ASSERTED]` for everything else about it: **its certifying tests do not exist
-yet**, so it is not certified, only observed.
-
-## What to do next
-
-### `[OPERATOR]` R-007 — the order for the next session. Follow it.
-
-1. **`test_every_checker_rejects_its_fixture` + the fixture harness, before any third checker.**
-   Establish the planted-violation pattern **once**, so every later checker inherits it. This also
-   creates `tests/`, which clears the `types` and `tests` red stages as a side effect.
-2. **Retrofit planted violations for the checkers already built** (`check_manifest`, `gate`) so
-   **nothing stays `[ASSERTED]` longer than one session.**
-   > **No checker is `[VERIFIED]` until it rejects its fixture.**
-3. **Then the remaining checkers in dependency order — each landing with its fixture and its
-   rejection test in the same step. Never a checker without its proof-of-failure.**
-
-*Why this order and not "finish the checkers first": two checkers currently exist and neither has
-any proof it can fail, which is the precise state §2.2 calls worse than no checker at all, because
-it manufactures confidence. Writing a third would compound that. The harness is the exit from it.*
-
----
-
-**Then continue: build the remaining checkers before the code they police (§2). 18 rows open.**
-
-1. `tools/check_no_stubs.py` (+`is_protocol_member`, +`resolve_deferral_marker`) — the `Protocol`
-   exception (§7.2) is real: a `...` body is legal **iff** the enclosing class inherits `Protocol`.
-   Fixtures must contain both a legitimate Protocol (passes) and a bare `...` function (fails).
-2. `tools/check_spec_isolation.py` (+`LOG_PATHS`) — including the narrow, self-closing §5.4
-   bootstrap exception. **The test that proves it self-closes must ship**: simulate `origin/main`
-   carrying a `gate` workflow and assert the same diff is then denied.
-3. `tools/check_import_graph.py` + `tools/import_rules.yaml` — empty of `lab.*` rules in P0; the
-   tool ships and is tested against a fixture tree. Every rule carries its `reason`, and the checker
-   **prints it on failure** — a message saying only "import rule violated" teaches the next agent
-   nothing and it will route around it.
-4. `tools/check_fixture_provenance.py` — no fixtures exist in P0; ships anyway, tested against a
-   fixture-of-fixtures.
-5. `tools/check_substrate_purity.py` — inert until P4. Ships now, with a planted violation.
-6. `tools/check_attribution.py` (+`scan_authorship_metadata`) — **authorship metadata only.** See
-   DE-000l: scanning file *contents* for "claude"/"anthropic" is an unwinnable loop and is not what
-   the rule is about.
-7. `tools/gate.py` — **fails closed on zero registered checkers.** *"Nothing to check"* is not
-   *"all checks passed."*
-8. `tools/preflight.py` — probe interpreter names (R-001). Row is now `call_site: n/a` (A-001), but
-   `test_preflight_stops_on_missing_gh_auth` still ships and must pass.
-9. `.github/workflows/ci.yml` — OS matrix; **status check named exactly `gate`**.
-10. `src/lab/core/config.py`, `logging.py` — call sites resolved, see *Open problems*.
-11. Hook portability fix + executing test (R-004).
-12. All certifying tests. **Every one of the seven checkers needs a planted violation and a test
-    proving it rejects it** (§2.2). This is the single most important thing in the phase.
-
-## Open problems the next session must not discover the hard way
-
-- **`call_site: required` on P0.CONFIG / P0.SECRETS / P0.LOGGING.** §6.3 demands each symbol be
-  referenced outside its own defining module *and* outside its own certifying test. P0 ships no CLI
-  and no engine, so there is no natural caller yet. This is a real design constraint, not a
-  formality — DoD-(a) exists because *"a primitive that exists but nothing calls is not done."*
-  Do **not** manufacture a fake caller to satisfy it; if no honest call site exists, that is a
-  finding to surface, not to paper over.
-- **The `gate` status-check context must be named exactly `gate`** in `ci.yml` — branch protection
-  already requires that literal string. A job named anything else leaves `main` permanently
-  unmergeable, and the failure mode is a green CI run that still blocks the merge.
-
-## Public from commit #1 — what this forces
-
-The repo is **public from the first commit**, by operator decision. There is no
-private staging window. Two consequences the builder must respect from the start,
-not retrofit:
-
-- **Attribution must be clean in the *first* commit**, not cleaned up later. The
-  `commit-msg` hook and `.claude/settings.json` are wired in §3.1 *before* that commit
-  precisely so the public history is clean from row zero. A public history cannot be
-  un-authored without a full rewrite.
-- **`LICENSE` (Apache-2.0) and `NOTICE` are committed in the first commit** (§3.1 / §5.3),
-  not at P8. A public repo with no licence is "all rights reserved" by default, and a
-  contributor could open a PR into that vacuum on day one.
-
-Public visibility is **not** release (Constitution S1): the repo being readable is not
-the Lab being packaged, tagged, announced, or installable. Building in the open, with
-red gates and a visible ledger of failures, is the same credibility play as the trial
-ledger itself.
-
-## What you must NOT do
-
-*This section is not optional. A fresh agent's characteristic failure is seeing something half-built, deciding to "clean it up," and destroying an invariant it did not know was there.*
-
-- **Do not write any `lab/` code before the checkers exist.** P0.4 first.
-- **Do not touch a governance doc in a code PR.** `CONSTITUTION.md`, `CONTRACTS.md`, `ACCEPTANCE.md`, `PLAYBOOK.md`, `docs/deep_dives/**`. CI will reject it. This is deliberate: the builder must not be able to edit the thing that judges the builder.
-- **Do not end a session with a stub that makes a check pass.** End red and honest. See §12.
-- **Do not resolve an ambiguity in the deep dive.** Stop, and surface it. An agent resolving ambiguity resolves it toward whatever is cheapest to build — not dishonestly, it just genuinely looks like the reasonable reading from where you are standing.
+`[VERIFIED]` **Gate stages green:** lint · types · tests · stubs · spec-isolation · imports ·
+attribution · fixtures · substrate-purity. **88 tests pass.**
 
 ## Blocking questions for the operator
 
 *Nothing may proceed past these.*
 
-| # | Question | Blocks |
+### Q-003 — `[OPEN]` **BLOCKING.** Six `call_site: required` rows have no honest caller.
+
+This is the single reason the gate is red. **Do not resolve it by writing a caller.** The
+Cold Start of Session 1 and operator ruling R-006 both anticipate exactly this and both say
+to surface it.
+
+| Row | Symbol | Why no honest caller exists |
 |---|---|---|
-| — | None open. | — |
+| `P0.CHK.STUBS.PROTOCOL` | `is_protocol_member` | An AST **node predicate**. The gate cannot call it; it is invoked per-node inside the scan loop. |
+| `P0.CHK.STUBS.DEFERRAL` | `resolve_deferral_marker` | Invoked per-stub during the scan. Not a stage. |
+| `P0.CHK.SPEC.LOGS` | `LOG_PATHS` | A **constant**. Nothing outside its module has a reason to read it. |
+| `P0.CONFIG` | `load_config` | P0 ships no CLI and no engine. |
+| `P0.SECRETS` | `get_secret` | Same. |
+| `P0.LOGGING` | `configure` | Same. |
 
-**Q-001 — RESOLVED 2026-07-18.** Harness permission for §3.2 granted by the operator; remote
-created. The builder did **not** route around the denial while it stood (no `git remote add` +
-`git push`, no `gh api` equivalent) — publishing a public repository under the operator's identity
-is exactly the class of action such a gate exists for.
+**What was already tried and is NOT available:**
 
-## Operator rulings — this session
+- **R-006's remedy — call it from `gate.py`'s real path — was applied wherever it honestly
+  works.** `scan_authorship_metadata` (`P0.CHK.ATTRIB.SCOPE`) is now invoked in-process by
+  `stage_attribution`, and that row **passes**. The three checker sub-symbols above are not
+  stage-shaped, so the same move would be a manufactured caller.
+- **A second test module would satisfy §6.3 as literally written** — the rule's search space
+  is *"every AST in `src/` and `tools/`, and every test other than the row's
+  `certifying_test`"*. **R-006 explicitly superseded that route** ("certifying tests prove
+  behaviour; they do not supply call sites") and attached the standing instruction to stop
+  and surface instead.
+- **Manufacturing a caller for `lab.core.*` is forbidden in writing** by the Session 1 Cold
+  Start: *"Do not manufacture a fake caller to satisfy it; if no honest call site exists,
+  that is a finding to surface, not to paper over."*
 
-*Binding. `[OPERATOR]` tags are not promotable from `[BUILDER]` suggestions; these were issued
-directly.*
+**The finding.** Six of P0's `call_site: required` fields assert a relationship P0's own
+design cannot produce. Three possible rulings, none of which the builder may pick:
 
-| # | Ruling |
-|---|---|
-| **R-001** | `[OPERATOR]` **Interpreter name.** `tools/preflight.py` **probes** interpreter names (`python`, `python3`, `sys.executable`) and asserts ≥ 3.11. Do **not** hardcode `python3`. §3.0's `python3` is *illustrative of intent* (verify Python ≥ 3.11 is present), not a literal command. **No amendment to the frozen deep dive.** Rationale: §5.1 chose Python-over-`make` for Windows, and Windows is the operator's primary platform — preflight must not fail on it. |
-| **R-002** | `[OPERATOR]` **Harness classifier is an environment artifact, not a property of the Lab.** Do **not** amend §3.0, and the *"only operator action is `gh auth login`"* claim **stands** — it is a claim about the Lab's design, not about the harness it runs under. Recorded here (a log), never in frozen governance. Supersedes Session 1 Surprise 1, which proposed a §3.0 amendment. |
-| **R-003** | Dangling `§4.6` in the Cold Start was a typo in a log. Corrected in place to `§3.1 / §5.3`. No ruling required. |
-| **R-004** | `[OPERATOR]` **commit-msg hook portability — must-fix before Gate 0, not blocking the bootstrap.** The `/Id` case-insensitivity address modifier is GNU-only; BSD `sed` on `macos-latest` rejects it. Make the hook portable across GNU **and** BSD `sed`, and make `test_commit_msg_hook_strips_trailer` **execute** the hook — feed it a commit message carrying a trailer, run it, assert the trailer is gone — rather than inspect its source, so the failure surfaces on the macOS runner. **That is DoD-(b): the test must fail if the hook is broken.** Implementation approach is the builder's. |
-| **R-005** | `[OPERATOR]` §5.4/§11.3 possible redundancy, and `ACCEPTANCE.md` having no P0 section: **noted, both left as-is.** P0's exit criteria live in P0 §12 (Gate 0); no `ACCEPTANCE.md` P0 section is required. Raise either again only if it blocks a checker. Supersedes Session 1 Surprises 4 and 5. |
+1. **Amend the manifest** (§10.5 procedure): these six become `call_site: n/a`, exactly as
+   A-001 did for `P0.BOOT.PREFLIGHT`, citing that their callers arrive in P1.
+2. **Rule that a non-certifying test is a valid call site** for node-level predicates and
+   constants, narrowing R-006 to stage-shaped symbols.
+3. **Rule that P0 exits with this stage red**, and the rows tick when P1 supplies callers.
+
+### Q-002 — `[OPEN]` **Non-blocking, but unresolvable by the builder.** `DIVERGENCES.md` defines no citable ID.
+
+§7.1 permits `@pytest.mark.skip`/`xfail` *"unless it cites a `DIVERGENCES.md` ID"*.
+`DIVERGENCES.md`'s Log table is keyed by Date/Gate/Fixture and **has no ID column**, so
+there is no ID for a marker to cite. Inventing an ID scheme is a spec decision.
+
+**Implemented meanwhile:** fail-closed — every skip/xfail is rejected, and the message says
+why. This is behaviourally identical under *every* candidate ID scheme, because with no IDs
+in the file no citation could resolve today. Inert in P0 (no skips exist). Only the
+resolution half changes once the operator rules.
+
+## What to do next
+
+1. **Rule on Q-003.** The gate cannot go green without it, and no amount of building helps.
+2. Q-002, at leisure.
+3. Review D-004 and D-005 below.
+4. Then Gate 0's remaining bootstrap items: the phase PR, and the `gate-0-scaffold` tag.
+
+## What you must NOT do
+
+- **Do not write a caller to make Q-003 go away.** That is the specific failure this project
+  was arranged to refuse, and it is pre-refused in writing twice.
+- **Do not weaken a checker to make a docstring pass.** §7.1 flagged three of this session's
+  own docstrings; all three were reworded. *The annoyance is the mechanism.*
+- **Do not touch a governance doc in a code PR.** §11.1.
+- **Do not resolve an ambiguity in the deep dive.** Stop and surface it.
 
 ## Non-blocking — decided by the builder, needs review
 
-*Proceed, but the operator should look.*
-
-| # | Decision | Tag | Review by |
-|---|---|---|---|
-| D-001 | **`.gitattributes` added** (`* text=auto eol=lf`) — not a manifest row. `core.autocrlf=true` is set system-wide on this machine, so a fresh Windows clone would check `.githooks/commit-msg` out with CRLF, making its `#!/usr/bin/env bash` shebang unexecutable and **silently removing one of the three attribution layers (§4.2)** on a platform §5.2 calls *supported, not assumed*. The manifest is a completeness floor, not a ceiling — it forbids missing rows, not extra files. | `[BUILDER]` | operator |
-| D-002 | **`NOTICE` names the copyright holder `Vaunox`** (the operator's own git and GitHub identity). `LICENSE` is left **verbatim** — its `Copyright [yyyy] [name of copyright owner]` line sits inside the APPENDIX, which is instructional boilerplate addressed to *downstream* users, and Apache's own practice is to leave it unedited and carry attribution in `NOTICE`. If the operator wants a legal name rather than a handle, this is a one-line change. | `[BUILDER]` | operator |
-| D-003 | **Commit #1 uses §3.1's message verbatim** despite also carrying `LICENSE`, `NOTICE`, and `.gitattributes`, which the message does not name. §3.1 prescribes the string literally; the deviation would be cosmetic; and the full composition is recorded here instead, which is where explanations belong. | `[BUILDER]` | operator |
+| # | Decision | Tag |
+|---|---|---|
+| D-004 | **Gate-fixture declaration format.** §9.2 fixes the three provenance assertions but not the syntax carrying them, and `ACCEPTANCE.md` has no P4 fixture block yet. `check_fixture_provenance.py` reads a `<!-- gate_fixtures -->` marker followed by a fenced yaml list (`id`, `path`, `blob_sha`, `derivation`, optional `engine_path`). Zero declarations is P0's correct state and is reported explicitly, never passed in silence. P4 should confirm or amend. | `[BUILDER]` |
+| D-005 | **Fixture injection seams.** Four checkers take their input from git (spec isolation, attribution, fixture provenance, substrate purity). Each reads a tracked, reviewable file (`FIXTURE_CHANGED_FILES`, `FIXTURE_GIT_LOG`, `FIXTURE_SUBSTRATE_DIFF`) **only when the tree has no `.git`** — so the seam is unreachable in the real repository, and dropping such a file beside the checker accomplishes nothing. Where the parse differs from git's output, the *judge* is shared and the git path is covered separately against the real repo. | `[BUILDER]` |
+| D-006 | **`test_hooks_path_set_before_first_commit` asserts the invariant's shadow, not `git config`.** `core.hooksPath` is working-copy state with no trace in history, and every CI runner is a fresh clone with none — asserting it there asserts a property of the runner. The test instead asserts what survives cloning: the hook is **in the first commit**, at mode `100755`, and the first commit carries no trailers. A hook wired up afterwards cannot produce all three. | `[BUILDER]` |
+| D-007 | **`ci.yml` splits matrix from context.** Job `checks` runs the OS matrix; job `gate` (no matrix, `needs: [checks]`, `if: always()`) aggregates and is the required context. It fails closed on any non-success result, because a skipped required check is not a passing one. | `[BUILDER]` |
 
 ---
 
@@ -228,53 +192,85 @@ directly.*
 
 ## Last `python tools/gate.py`
 
-**Run at:** 2026-07-18 · **Commit:** `13a1178` · **Exit code:** `1`
+**Run at:** 2026-07-19 · **Commit:** `9d90afa` · **Exit code:** `1`
 
-Stage banners and verdict, piped verbatim. The per-stage failure detail (57 manifest failures and
-the missing-checker lines) is on stderr and is reproduced in full by re-running the command.
+Piped verbatim. Nine of ten stages green; `manifest` red on six `call_site` rows and
+nothing else. Every row exists — `rows open: 0`.
 
 ```
+All checks passed!
+Success: no issues found in 26 source files
+........................................................................ [ 81%]
+................                                                         [100%]
+88 passed in 2.14s
+    P0.CONFIG: lab.core.config.load_config is never referenced outside its own module and certifying test. Definition is not use (section 6.3)
+    P0.SECRETS: lab.core.config.get_secret is never referenced outside its own module and certifying test. Definition is not use (section 6.3)
+    P0.LOGGING: lab.core.logging.configure is never referenced outside its own module and certifying test. Definition is not use (section 6.3)
+    P0.CHK.STUBS.PROTOCOL: tools.check_no_stubs.is_protocol_member is never referenced outside its own module and certifying test. Definition is not use (section 6.3)
+    P0.CHK.STUBS.DEFERRAL: tools.check_no_stubs.resolve_deferral_marker is never referenced outside its own module and certifying test. Definition is not use (section 6.3)
+    P0.CHK.SPEC.LOGS: tools.check_spec_isolation.LOG_PATHS is never referenced outside its own module and certifying test. Definition is not use (section 6.3)
+check_no_stubs: clean over 13 file(s)
+check_spec_isolation: spec and code both touched, permitted by the section 5.4 bootstrap exception -- no workflow on origin/main produces the 'gate' check yet. This exception closes itself the moment one does.
+check_import_graph: clean -- 0 rule(s) over 4 module(s)
+check_fixture_provenance: no gate fixtures declared in ACCEPTANCE.md. That is the expected P0 state -- the tool ships before the phase it polices, so the judge is never built in the same session as the defendant.
+check_substrate_purity: inert -- no substrate-frozen tag exists yet. The kill gate arms at Gate 4 and fires at Gate 5. Reported rather than passed silently: nothing to compare is not a clean substrate.
+
 === lint ===
 --- lint: ok
+
 === types ===
---- types: FAILED
+--- types: ok
+
 === tests ===
---- tests: FAILED
+--- tests: ok
+
 === manifest ===
 phase:                        P0
 rows total:                   32
-rows built:                   14
-rows open:                    18
+rows built:                   32
+rows open:                    0
 spec sections without a row:  0
 rows without a spec section:  0
-failures:                     57
+failures:                     6
 --- manifest: FAILED
+
 === stubs ===
---- stubs: FAILED
+--- stubs: ok
+
 === spec-isolation ===
---- spec-isolation: FAILED
+--- spec-isolation: ok
+
 === imports ===
---- imports: FAILED
+--- imports: ok
+
 === attribution ===
---- attribution: FAILED
+    clean over 17 record(s)
+--- attribution: ok
+
 === fixtures ===
---- fixtures: FAILED
+--- fixtures: ok
+
 === substrate-purity ===
---- substrate-purity: FAILED
+--- substrate-purity: ok
 
 ============================================================
-GATE RED -- failed stages: types, tests, manifest, stubs, spec-isolation, imports, attribution, fixtures, substrate-purity
+GATE RED -- failed stages: manifest
 ```
 
-**Every red stage is unbuilt work, not a defect.** `types` fails because `mypy` is configured over
-`tests`, which does not exist. `tests` fails because no test exists. The six checker stages fail
-because their scripts are not written — `gate.py` reports a missing checker as a **failure, never a
-skip**, which is the same fail-closed discipline as the empty registry.
+**The six manifest failures, verbatim:**
 
-`[VERIFIED]` **`gate.py` fails closed on zero registered checkers** — `run_gate(root, [])` raises
-`EmptyRegistryError` rather than reporting success. Demonstrated directly this session; the
-certifying test `test_gate_fails_closed_on_zero_checkers` is **not yet written**, so the property is
-observed, not certified.
+```
+P0.CONFIG: lab.core.config.load_config is never referenced outside its own module and certifying test. Definition is not use (section 6.3)
+P0.SECRETS: lab.core.config.get_secret is never referenced outside its own module and certifying test. Definition is not use (section 6.3)
+P0.LOGGING: lab.core.logging.configure is never referenced outside its own module and certifying test. Definition is not use (section 6.3)
+P0.CHK.STUBS.PROTOCOL: tools.check_no_stubs.is_protocol_member is never referenced outside its own module and certifying test. Definition is not use (section 6.3)
+P0.CHK.STUBS.DEFERRAL: tools.check_no_stubs.resolve_deferral_marker is never referenced outside its own module and certifying test. Definition is not use (section 6.3)
+P0.CHK.SPEC.LOGS: tools.check_spec_isolation.LOG_PATHS is never referenced outside its own module and certifying test. Definition is not use (section 6.3)
+```
+
+**Read the tally, not the prose:** `rows built: 32`, `rows open: 0`, `spec sections without
+a row: 0`, `rows without a spec section: 0`. The phase is *built*. It is not *cleared*,
+because six rows assert a call-site relationship P0 cannot honestly supply — Q-003.
 
 ## Branch protection — `gh api` response, verbatim
 
@@ -356,16 +352,16 @@ that supplies the check it must satisfy.
 
 *Generated by `check_manifest.py`. Never hand-counted.*
 
-**Run at:** 2026-07-18 · **Commit:** `d1cabb7` · **Command:** `python tools/check_manifest.py`
+**Run at:** 2026-07-19 · **Commit:** `9d90afa` · **Command:** `python tools/check_manifest.py`
 
 ```
 phase:                        P0
 rows total:                   32
-rows built:                   13
-rows open:                    19
+rows built:                   32
+rows open:                    0
 spec sections without a row:  0
 rows without a spec section:  0
-failures:                     66
+failures:                     6
 ```
 
 **The closed loop closes in both directions** — this is the self-bootstrap (§2.1) working:
@@ -653,3 +649,143 @@ is established once and every later checker inherits it.
 
 The `tests/` tree does not exist at all, which is why `mypy` and `pytest` both fail. Creating it
 turns three red stages green at once.
+
+---
+
+## Session 2 — 2026-07-19 — Phase P0
+
+*Operator ruling R-007 followed in order: harness first, retrofit second, remaining checkers
+third, each landing with its proof-of-failure.*
+
+### Built
+
+**The harness (R-007 step 1).**
+- `tests/completeness/registry.py`, `test_every_checker_rejects_its_fixture` —
+  `[VERIFIED]` all seven checkers rejected their planted violations.
+- `test_checker_registry_matches_manifest` — `[VERIFIED]`. The registry is derived from the
+  frozen manifest, so it cannot shrink to "the checkers that happen to exist".
+
+**The retrofit (R-007 step 2).** `check_manifest` and `gate` were `[ASSERTED]` at session
+start with no proof either could fail. Both are now `[VERIFIED]`:
+- `test_manifest_rejects_missing_row`, `..._uncalled_symbol`, `..._unspecified_row`,
+  `..._refuses_unfrozen_deep_dive`, plus `test_manifest_accepts_clean_tree` — which closes
+  the Session 1 uncertainty that `check_infra`/`check_existence` had never been exercised
+  against a *passing* tree.
+- `test_gate_fails_closed_on_zero_checkers` and five more.
+
+**The five remaining checkers (R-007 step 3),** each with planted violation, negative
+control, and certifying tests: `check_no_stubs`, `check_spec_isolation`,
+`check_import_graph`, `check_attribution`, `check_fixture_provenance`,
+`check_substrate_purity`.
+
+**The rest of the manifest.** `tools/preflight.py`, `.github/workflows/ci.yml`,
+`tools/import_rules.yaml`, `src/lab/core/config.py`, `src/lab/core/logging.py`,
+`tests/completeness/test_bootstrap.py`, `test_ci_config.py`, `test_scaffold.py`,
+`tests/unit/core/`. R-004 discharged.
+
+**Result: `rows built: 32`, `rows open: 0`, 88 tests, nine of ten gate stages green.**
+
+### Tried and rejected
+
+- Approach: word-boundary matching for the kill gate's engine vocabulary, on the reasoning
+  that `\bdaily\b` avoids firing inside unrelated identifiers.
+  Failed because: it **silently missed `square_off_at`** in the planted fixture — `\b`
+  requires a non-word character after `off`, and `_` is a word character. A suffixed
+  identifier is precisely how this vocabulary actually arrives in a substrate. Caught only
+  because the fixture contained the realistic shape rather than the bare term.
+  → DE-001. Now substring + case-insensitive, with `MIS` alone matched case-sensitively as
+  a whole word so it does not fire on "mismatch"/"permission"/"dismiss".
+
+- Approach: `test_commit_msg_hook_uses_no_gnu_only_sed_extension` grepping the hook file for
+  `sed -i` and `/Id`.
+  Failed because: **the hook's own comment block explains the defect it replaced**, quoting
+  both strings verbatim. The test flagged the explanation as the offence. Same shape as
+  DE-000l — scanning text when the subject is behaviour. → DE-002. Comments are stripped
+  first.
+
+- Approach: `test_hooks_path_set_before_first_commit` asserting `git config core.hooksPath`.
+  Failed because: local config is working-copy state with no trace in history, and **every
+  CI runner is a fresh clone that has none** — the test would have gone red on all three
+  matrix legs while the invariant it names was perfectly intact. → DE-003, and D-006.
+
+- Approach: `assert name != "python3" or True` in the preflight interpreter test.
+  Failed because: it is a tautology and asserts nothing. **Ruff caught it, not review.**
+  Rewritten to drive every named candidate to failure through the injected runner and assert
+  the `sys.executable` fallback resolves — which is also environment-independent, where the
+  first version depended on whether `python3` happened to be installed.
+
+### Decisions
+
+- `[BUILDER]` D-004 gate-fixture declaration format — see *Non-blocking*.
+- `[BUILDER]` D-005 fixture injection seams, unreachable wherever a `.git` exists.
+- `[BUILDER]` D-006 hooks-path test asserts the invariant's shadow.
+- `[BUILDER]` D-007 `ci.yml` splits the matrix job from the `gate` context job.
+- `[BUILDER]` **Uniform `--root` CLI across all seven checkers**, so one test can drive them
+  all. `check_manifest`'s `--repo` was renamed; no spec names the flag.
+- `[BUILDER]` **`check_no_stubs` assembles its own banned words at import** (`_assemble`).
+  The checker scans `tools/` and lives in `tools/`; spelling `TODO` as a literal would make
+  it violate its own rule, and the obvious escape — excluding itself — is a hole in the one
+  place a hole must not be.
+- `[BUILDER]` **R-006 applied where it honestly works, and only there.**
+  `scan_authorship_metadata` is now called by `gate.stage_attribution` on the real path, and
+  that row passes. The three sub-symbols that are not stage-shaped were **not** given
+  manufactured callers. See Q-003.
+
+### Uncertain
+
+*What the next session should not inherit as confidence.*
+
+- **`ci.yml` has never run.** No workflow has executed on any runner — the repo has no PR
+  yet. The `gate` context name, the matrix, and the aggregate job are asserted by
+  `test_ci_config.py` **against the YAML**, not against a GitHub run. The first PR is the
+  first real test, and D-007's reasoning about matrix context naming is the thing most
+  likely to be wrong in a way only GitHub can reveal.
+- **The hook is executed on Windows only.** `test_commit_msg_hook_strips_trailer` genuinely
+  runs the hook, which is what R-004 asked for — but so far only under Git Bash on this
+  machine. The macOS/BSD leg that motivated R-004 is still unexercised until CI runs.
+- **`check_attribution`'s tag scanning has never seen a tag.** No tag exists. The commit
+  path is covered over the full real history; the tagger path is code that has run against
+  an empty input.
+- **`fixture_predates_engine` is proven on a synthetic two-commit repository**, not on a
+  real fixture-then-engine sequence, because no gate fixtures exist until P4.
+
+### Blocked
+
+- **Q-003** — six `call_site: required` rows with no honest caller, on the operator, since
+  2026-07-19. **Blocks Gate 0.** This is the only reason the gate is red.
+
+### Surprises
+
+*Each is either a spec bug (amend it) or a dead end (log it). Neither is "just proceed."*
+
+8. **Session 1's Surprise 5 is falsified.** It predicted the §5.4 bootstrap exception would
+   never need to deploy, reasoning that the phase branch would carry `CODE` + `LOGS` and no
+   `SPEC`. But amendments A-001–A-003 edited `docs/deep_dives/P0_scaffold.md` **on this
+   branch**, so `origin/main...HEAD` carries SPEC and CODE together and the exception is
+   load-bearing right now. `test_spec_isolation_bootstrap_exception_is_open_on_this_repo`
+   pins the fact; `..._self_closes` proves the same diff is denied once `origin/main`
+   produces the `gate` check. The exception is narrow and self-closing, as designed — but it
+   is *deploying*, which Session 1 believed it would not.
+
+9. **The `gate` status-check context is a trap with a green face.** GitHub names matrix
+   checks `job (os)`, so a single matrix job named `gate` produces
+   `gate (ubuntu-latest)` and friends — and **never a context called `gate`**. Branch
+   protection requires the literal string, so `main` would have been permanently unmergeable
+   behind a fully green CI run with nothing in the logs to explain it. Resolved by D-007.
+   The HANDOFF warned about the name; it did not warn that a matrix changes it.
+
+10. **The no-stub checker flagged three of this session's own docstrings**, including
+    *"Later layers override earlier ones"* — where "Later" is an ordinal, not a deferral.
+    All three were reworded rather than the rule loosened. §7.1 says the bluntness *is* the
+    mechanism, and the first instinct on being flagged was to add an exception, which is
+    exactly the instinct the rule exists to overrule.
+
+11. **`shutil.which("bash")` returns `None` on Windows even where bash exists.** Git for
+    Windows ships `bash.exe` in `Git/bin/` but only puts `Git/cmd/` on PATH. Taken at face
+    value this would have turned the one test R-004 requires to *execute* the hook into a
+    test that silently never runs on the operator's primary platform.
+
+### tools/gate.py
+
+Piped verbatim into *MACHINE STATE* above. `GATE RED`, exit 1, one failing stage, six
+failures, all Q-003.
