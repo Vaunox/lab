@@ -291,12 +291,17 @@ def defines_symbol(module: Path, symbol: str) -> bool:
     except (OSError, SyntaxError):
         return False
     for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
-            if node.name == symbol:
-                return True
-        elif isinstance(node, ast.AnnAssign):
-            if isinstance(node.target, ast.Name) and node.target.id == symbol:
-                return True
+        if (
+            isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
+            and node.name == symbol
+        ):
+            return True
+        if (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == symbol
+        ):
+            return True
         elif isinstance(node, ast.Assign):
             for target in node.targets:
                 if isinstance(target, ast.Name) and target.id == symbol:
@@ -457,8 +462,7 @@ def assert_called_outside_own_module(repo: Path, row: Row, report: Report) -> bo
         exclude.append(repo / row.artifact)
         if _find_script_invocation(repo, row.artifact, exclude) is None:
             report.fail(
-                f"{row.id}: nothing invokes {row.artifact}. Definition is not use "
-                "(section 6.3)"
+                f"{row.id}: nothing invokes {row.artifact}. Definition is not use " "(section 6.3)"
             )
             return False
         return True
@@ -504,9 +508,10 @@ def _find_script_invocation(repo: Path, artifact: str, exclude: Iterable[Path]) 
                 return str(path)
             if isinstance(node, ast.ImportFrom) and node.module in module_names:
                 return str(path)
-            if isinstance(node, ast.Import):
-                if any(alias.name in module_names for alias in node.names):
-                    return str(path)
+            if isinstance(node, ast.Import) and any(
+                alias.name in module_names for alias in node.names
+            ):
+                return str(path)
 
     workflows = repo / ".github" / "workflows"
     for path in sorted(workflows.glob("*.yml")) + sorted(workflows.glob("*.yaml")):
@@ -516,9 +521,12 @@ def _find_script_invocation(repo: Path, artifact: str, exclude: Iterable[Path]) 
             return str(path)
 
     precommit = repo / ".pre-commit-config.yaml"
-    if precommit.exists() and precommit.resolve() not in excluded:
-        if _precommit_entry_mentions(precommit, artifact):
-            return str(precommit)
+    if (
+        precommit.exists()
+        and precommit.resolve() not in excluded
+        and _precommit_entry_mentions(precommit, artifact)
+    ):
+        return str(precommit)
 
     hooks = repo / ".githooks"
     if hooks.exists():
