@@ -1,0 +1,26 @@
+# Substrate boundaries, as data. Deep dive P0 section 9.1.
+#
+# A top-level list of rules. Two shapes are recognised, and the registry is
+# closed -- an unrecognised shape is a hard error, never a skip:
+#
+#   - symbol: TrialResult
+#     constructed_only_in: ["lab.ledger.*"]
+#     reason: "The engine cannot mint a result. Only the ledger can. Deep dive P1 section 9."
+#
+#   - module: lab.costs.schedule
+#     imported_only_by: ["lab.costs.*"]
+#     reason: "Engines may duplicate logic. Engines may never duplicate truth."
+#
+# Every rule MUST carry a `reason`, and the checker prints it on failure. A rule
+# with no reason is refused at load. The reason is not commentary attached to the
+# rule -- it is half of what the rule does, because the failure message is the
+# only part of this file the next agent will ever read, and an agent taught
+# nothing routes around the obstacle.
+#
+# EMPTY OF lab.* RULES IN P0, AND DELIBERATELY SO. There is no `lab` code yet to
+# police. The tool ships now and is proven against a fixture tree, because
+# building the boundary checker in the phase that first needs it would mean
+# building the judge and the defendant in the same session. The rules arrive with
+# the code they police: P1 adds the ledger rules, P2 the cost-schedule rule.
+
+[]

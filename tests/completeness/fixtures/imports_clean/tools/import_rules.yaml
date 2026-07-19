@@ -1,0 +1,13 @@
+# Planted rules for check_import_graph. Fixture data.
+#
+# These are the two rule shapes from section 9.1, written against a fixture tree
+# that violates both. The reasons are the real ones from the deep dive, because
+# `test_import_graph_prints_reason_on_failure` asserts they reach the output.
+
+- symbol: TrialResult
+  constructed_only_in: ["lab.ledger.*"]
+  reason: "The engine cannot mint a result. Only the ledger can. Deep dive P1 section 9."
+
+- module: lab.costs.schedule
+  imported_only_by: ["lab.costs.*"]
+  reason: "Engines may duplicate logic. Engines may never duplicate truth."
