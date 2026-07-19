@@ -135,6 +135,48 @@ which point it is not a gate.
 
 ---
 
+### DE-004 — `[TEST]` — Fixing a finding where you found it, and not where else it lives
+
+**Session:** 2 · **Phase:** P0 · **Date:** 2026-07-19
+
+**What was tried:**
+DE-003 established that `core.hooksPath` is working-copy state which `git clone` does not
+carry, and that asserting it in anything CI runs is asserting a property of the runner.
+`test_hooks_path_set_before_first_commit` was rewritten accordingly. **The identical
+assertion in `check_manifest.check_infra` was left untouched**, because the finding was
+filed as a fact about *that test* rather than as a fact about *the invariant*.
+
+**Why it failed:**
+The first real CI run went red on **all three matrix legs** with
+`P0.BOOT.GIT: core.hooksPath is '', expected '.githooks'` — the same defect, in the
+checker rather than the test, roughly forty minutes after it had been diagnosed, written
+up, and fixed elsewhere in the same session.
+
+The mechanism is not carelessness about the fix; the fix was correct. It is that a dead
+end gets recorded against **the symptom's location** instead of **the invariant's scope**,
+so the search for other instances never happens. The local gate stayed green throughout,
+because the developer machine is precisely the environment where the wrong assertion
+holds.
+
+**Evidence:**
+`gh run view 29679712178 --log-failed` — three legs, one message. Local `tools/gate.py`:
+`GATE GREEN -- 10 stages passed`, on the same commit.
+
+**Would it ever work?** The assertion never works anywhere a clone is fresh. The checker now
+asserts what survives cloning — `.githooks/commit-msg` tracked at index mode `100755` — and
+treats an **unset** hooks path as acceptable (CI never commits, so it needs no commit-msg
+hook) while still failing a hooks path aimed **elsewhere**, which disables the hook without
+removing it.
+
+**Do not retry unless:** never. And the general lesson, which is the reason this entry exists
+separately from DE-003: **when a dead end is found, grep for every other site with the same
+shape before closing it.** Ask what the finding is about — here, "local git config is not a
+repository property" — and search for *that*, not for the file it was noticed in. A green
+local gate is not evidence of absence when the defect is environment-shaped.
+
+
+---
+
 ## Template
 
 ```markdown
