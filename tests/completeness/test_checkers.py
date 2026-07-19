@@ -1000,3 +1000,66 @@ def test_manifest_call_site_registry_matches_the_frozen_manifest() -> None:
         "P0 should still exercise both classifications after A-004; if "
         f"`required` has vanished entirely the registry is no longer tested: {used}"
     )
+
+
+def test_manifest_infra_does_not_require_local_git_config() -> None:
+    """A fresh clone has no `core.hooksPath`, and that is not a defect.
+
+    `git clone` carries no local config, so every CI runner has it unset. This
+    checker originally asserted it and went red on all three matrix legs of the
+    first real CI run, while the invariant it names was perfectly intact.
+
+    DE-003 records the identical mistake being caught in
+    `test_hooks_path_set_before_first_commit` earlier in the same session. It
+    was fixed there and missed here. The assertion below pins the clone case
+    directly so the finding cannot be lost a second time.
+    """
+    row = check_manifest.Row(
+        id="P0.BOOT.GIT",
+        artifact=".git",
+        kind="infra",
+        spec="\u00a73.1",
+        call_site="n/a",
+        certifying_test="tests/completeness/test_bootstrap.py::test_hooks_path_set_before_first_commit",
+    )
+    report = check_manifest.Report()
+
+    assert check_manifest.check_infra(REPO_ROOT, row, report) is True
+    assert report.failures == []
+
+
+def test_manifest_infra_rejects_a_hooks_path_pointing_elsewhere(tmp_path: Path) -> None:
+    """Unset is fine. Set-to-something-else is a real misconfiguration.
+
+    A hooks path aimed at another directory disables the attribution hook
+    without removing it, which is worse than not having one: the file is still
+    in the tree, so a reviewer sees a hook and reasonably assumes it runs.
+    """
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", "-C", str(tmp_path), *args], check=True, capture_output=True)
+
+    git("init", "-b", "main")
+    git("config", "user.email", "operator@example.com")
+    git("config", "user.name", "Operator")
+    hooks = tmp_path / ".githooks"
+    hooks.mkdir()
+    (hooks / "commit-msg").write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-m", "chore: initial")
+    git("update-index", "--chmod=+x", ".githooks/commit-msg")
+    git("commit", "-am", "chore: mark the hook executable")
+    git("config", "core.hooksPath", ".elsewhere")
+
+    row = check_manifest.Row(
+        id="P0.BOOT.GIT",
+        artifact=".git",
+        kind="infra",
+        spec="\u00a73.1",
+        call_site="n/a",
+        certifying_test="tests/completeness/test_bootstrap.py::test_hooks_path_set_before_first_commit",
+    )
+    report = check_manifest.Report()
+
+    assert check_manifest.check_infra(tmp_path, row, report) is False
+    assert any("hooks path pointing elsewhere" in f or ".elsewhere" in f for f in report.failures)

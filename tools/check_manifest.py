@@ -404,16 +404,52 @@ def check_infra(repo: Path, row: Row, report: Report) -> bool:
         if inside.returncode != 0:
             report.fail(f"{row.id}: not a git repository")
             return False
+
+        # The durable evidence, and NOT `git config core.hooksPath`.
+        #
+        # `core.hooksPath` is working-copy state that `git clone` does not carry,
+        # so every CI runner has it unset -- and asserting it there asserts a
+        # property of the runner, not of the repository. This checker failed on
+        # all three matrix legs for exactly that reason, having been written to
+        # the literal wording of section 3.1.
+        #
+        # DE-003 records the same mistake being found and fixed in
+        # `test_hooks_path_set_before_first_commit` earlier in the same session.
+        # It was fixed in the test and missed here, which is the whole argument
+        # for writing dead ends down: the finding generalises further than the
+        # place it was found.
+        #
+        # What survives cloning, and is therefore what is asserted: the hook is
+        # tracked and executable, so a fresh clone can wire it. An UNSET
+        # hooksPath is not a failure -- CI never commits, so it needs no
+        # commit-msg hook. A hooksPath set to something *else* is a real
+        # misconfiguration and does fail.
+        mode = _index_mode(repo, ".githooks/commit-msg")
+        if mode is None:
+            report.fail(
+                f"{row.id}: .githooks/commit-msg is not tracked, so a fresh "
+                "clone receives no commit-msg hook at all (section 3.1)"
+            )
+            return False
+        if mode != "100755":
+            report.fail(
+                f"{row.id}: .githooks/commit-msg has index mode {mode}, expected "
+                "100755 -- a non-executable hook silently does not run"
+            )
+            return False
+
         hooks = subprocess.run(
             ["git", "-C", str(repo), "config", "--get", "core.hooksPath"],
             capture_output=True,
             text=True,
             check=False,
         )
-        if hooks.stdout.strip() != ".githooks":
+        configured = hooks.stdout.strip()
+        if configured and configured != ".githooks":
             report.fail(
-                f"{row.id}: core.hooksPath is {hooks.stdout.strip()!r}, expected "
-                "'.githooks' (section 3.1)"
+                f"{row.id}: core.hooksPath is {configured!r}, expected '.githooks' "
+                "(section 3.1). A hooks path pointing elsewhere disables the "
+                "attribution hook without removing it"
             )
             return False
         return True
