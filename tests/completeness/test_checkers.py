@@ -16,11 +16,13 @@ sign. Both fixtures ship.
 
 from __future__ import annotations
 
+import ast
 import subprocess
 import sys
 from pathlib import Path
 
 import check_manifest
+import check_no_stubs
 import pytest
 
 from tests.completeness.registry import CHECKERS, FIXTURE_ROOT, REPO_ROOT, Checker
@@ -299,3 +301,107 @@ def test_manifest_frozen_check_reads_the_parsed_key_not_the_prose(tmp_path: Path
     assert "frozen" in deep_dive.read_text(encoding="utf-8").lower()
     with pytest.raises(check_manifest.ManifestError):
         check_manifest.assert_deep_dive_frozen(deep_dive)
+
+
+# --------------------------------------------------------------------------
+# check_no_stubs
+# --------------------------------------------------------------------------
+
+
+def _stub_findings(fixture: str) -> list[str]:
+    return check_no_stubs.scan(FIXTURE_ROOT / fixture).findings
+
+
+def test_stubs_rejects_bare_pass() -> None:
+    """Section 7.1: a function body that is only `pass`.
+
+    The documented variant is asserted alongside the bare one because a docstring
+    does not stop a body being empty, and the polished half of a failure mode is
+    the half that survives review.
+    """
+    findings = _stub_findings("stubs")
+
+    assert any("bare_pass_body" in f and "`pass`" in f for f in findings), findings
+    assert any("documented_pass_body" in f for f in findings), findings
+
+
+def test_stubs_allows_protocol_ellipsis() -> None:
+    """Section 7.2: the exemption is real, and it is narrow.
+
+    Two assertions, because either alone is satisfiable by a broken checker. The
+    clean tree proves the exemption applies; the planted tree proves it does not
+    leak to a bare function or to an unrelated class that merely contains one.
+    """
+    assert _stub_findings("stubs_clean") == []
+
+    findings = _stub_findings("stubs")
+    assert any("bare_ellipsis_is_not_a_protocol_member" in f for f in findings), findings
+    assert any("method_with_ellipsis" in f for f in findings), findings
+    assert not any("def price" in f or "is_tradable" in f for f in findings), findings
+
+
+def test_stubs_protocol_predicate_reads_bases_and_decorators() -> None:
+    """`is_protocol_member` at the unit level, on both routes into the exemption."""
+    module = ast.parse(
+        "class ByBase(Protocol):\n    pass\n"
+        "@runtime_checkable\n"
+        "class ByDecorator:\n    pass\n"
+        "class Unrelated:\n    pass\n"
+    )
+    classes = {node.name: node for node in module.body if isinstance(node, ast.ClassDef)}
+
+    assert check_no_stubs.is_protocol_member(classes["ByBase"])
+    assert check_no_stubs.is_protocol_member(classes["ByDecorator"])
+    assert not check_no_stubs.is_protocol_member(classes["Unrelated"])
+    assert not check_no_stubs.is_protocol_member(None)
+
+
+def test_stubs_rejects_unregistered_marker() -> None:
+    """Section 7.3: a marker naming no open row is worse than no marker.
+
+    It carries the appearance of having been registered, which is the property
+    that gets a reviewer to move on.
+    """
+    findings = _stub_findings("stubs")
+
+    assert any("DEF-404" in f and "no open row" in f for f in findings), findings
+
+
+def test_stubs_marker_resolves_against_an_open_deferral(tmp_path: Path) -> None:
+    """The escape hatch opens when the ID is genuinely registered.
+
+    Without this the previous test is satisfied by a resolver that always returns
+    False -- which would ban mid-session checkpoints outright and, per section
+    7.3, is how you *get* silent stubs.
+    """
+    deferrals = tmp_path / "DEFERRALS.md"
+    deferrals.write_text(
+        "# DEFERRALS\n\n## Open deferrals\n\n"
+        "| ID | Phase | Manifest row | What is missing | Why | Opened | Closes by |\n"
+        "|---|---|---|---|---|---|---|\n"
+        "| DEF-001 | P9 | P9.ROW | the body | checkpoint | today | tomorrow |\n\n---\n",
+        encoding="utf-8",
+    )
+
+    assert check_no_stubs.resolve_deferral_marker("DEF-001", deferrals)
+    assert not check_no_stubs.resolve_deferral_marker("DEF-404", deferrals)
+    assert not check_no_stubs.resolve_deferral_marker("DEF-001", tmp_path / "absent.md")
+
+
+def test_stubs_rejects_not_implemented_and_deferral_language() -> None:
+    """The remaining two rows of the section 7.1 table."""
+    findings = _stub_findings("stubs")
+
+    assert any("NotImplementedError" in f for f in findings), findings
+    assert any("deferral language" in f for f in findings), findings
+
+
+def test_stubs_refuses_to_run_on_a_tree_with_nothing_to_scan(tmp_path: Path) -> None:
+    """Nothing to scan is not a clean scan.
+
+    The same fail-closed discipline as the gate's empty registry, one level down.
+    A checker pointed at the wrong directory must say so rather than report the
+    silence as cleanliness.
+    """
+    with pytest.raises(check_no_stubs.StubCheckError):
+        check_no_stubs.scan(tmp_path)
