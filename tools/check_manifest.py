@@ -488,6 +488,11 @@ def _find_script_invocation(repo: Path, artifact: str, exclude: Iterable[Path]) 
     """Locate an executable invocation edge for a script path."""
     excluded = {p.resolve() for p in exclude}
     dotted = artifact.removesuffix(".py").replace("/", ".")
+    # tools/ is a scripts directory, not a package, so a sibling importing it
+    # writes `import check_manifest` rather than `import tools.check_manifest`.
+    # Both name the same file and both are real invocation edges.
+    bare = dotted.rsplit(".", 1)[-1]
+    module_names = {dotted, bare}
 
     for path in _python_files(repo, excluded):
         try:
@@ -497,10 +502,10 @@ def _find_script_invocation(repo: Path, artifact: str, exclude: Iterable[Path]) 
         for node in ast.walk(tree):
             if isinstance(node, ast.Constant) and node.value == artifact:
                 return str(path)
-            if isinstance(node, ast.ImportFrom) and node.module == dotted:
+            if isinstance(node, ast.ImportFrom) and node.module in module_names:
                 return str(path)
             if isinstance(node, ast.Import):
-                if any(alias.name == dotted for alias in node.names):
+                if any(alias.name in module_names for alias in node.names):
                     return str(path)
 
     workflows = repo / ".github" / "workflows"
