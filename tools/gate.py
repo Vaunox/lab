@@ -152,10 +152,10 @@ def run_gate(root: Path, stages: list[Stage]) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="The gate (deep dive P0 section 5.1).")
-    parser.add_argument("--repo", type=Path, default=REPO_ROOT)
+    parser.add_argument("--root", type=Path, default=REPO_ROOT)
     args = parser.parse_args(argv)
     try:
-        return run_gate(args.repo, STAGES)
+        return run_gate(args.root, STAGES)
     except EmptyRegistryError as exc:
         print(f"gate: FAILS CLOSED: {exc}", file=sys.stderr)
         return 2

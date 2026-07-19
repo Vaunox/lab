@@ -47,9 +47,9 @@ show_error_codes = true
 
 # The planted-violation fixtures are deliberately broken trees fed to the
 # checkers. They are data, not source, and must not be type-checked or linted.
-[[tool.mypy.overrides]]
-module = "tests.completeness.fixtures.*"
-ignore_errors = true
+# Excluded rather than ignore_errors: mypy still names and parses an ignored
+# module, and two fixtures deliberately share a filename, which collides.
+exclude = ["^tests/completeness/fixtures/"]
 
 [tool.ruff]
 line-length = 100

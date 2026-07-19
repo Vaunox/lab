@@ -753,17 +753,19 @@ def format_tally(report: Report, phase: str) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Completeness gate (deep dive P0 section 6).")
-    parser.add_argument("--repo", type=Path, default=Path(__file__).resolve().parent.parent)
+    # --root is the uniform contract every checker honours, so that one test can
+    # drive all seven against their planted violations (section 2.2).
+    parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parent.parent)
     parser.add_argument("--phase", default=None)
     args = parser.parse_args(argv)
 
     try:
-        report = check(args.repo, args.phase)
+        report = check(args.root, args.phase)
     except ManifestError as exc:
         print(f"check_manifest: REFUSED TO RUN: {exc}", file=sys.stderr)
         return 2
 
-    deep_dive = locate_deep_dive(args.repo, args.phase)
+    deep_dive = locate_deep_dive(args.root, args.phase)
     phase = deep_dive.name.split("_", 1)[0]
     print(format_tally(report, phase))
     if report.failures:
