@@ -69,6 +69,72 @@ failures:                     0
 GATE GREEN -- 10 stages passed
 ```
 
+## Final `main` gate status — P0 closed
+
+**Run at:** 2026-07-19 · **Branch:** `main`, after PR #1, #2 and #3 merged · **Commit:** `4f1399a`
+· **Exit code:** `0`
+
+Piped verbatim. This is `main` at the moment P0 closed and P1 opened — distinct from the
+clean-clone run above, which is the tagged snapshot. Both are recorded because they answer
+different questions: the tag run answers *"does the Gate 0 artifact stand up on a stranger's
+machine"*, and this one answers *"is the branch everything now builds on green"*.
+
+```
+All checks passed!
+Success: no issues found in 26 source files
+........................................................................ [ 77%]
+.....................                                                    [100%]
+93 passed in 3.98s
+check_no_stubs: clean over 13 file(s)
+check_spec_isolation: clean -- spec 0, code 0, logs 0 (exempt)
+check_import_graph: clean -- 0 rule(s) over 4 module(s)
+check_fixture_provenance: no gate fixtures declared in ACCEPTANCE.md. That is the expected P0 state -- the tool ships before the phase it polices, so the judge is never built in the same session as the defendant.
+check_substrate_purity: inert -- no substrate-frozen tag exists yet. The kill gate arms at Gate 4 and fires at Gate 5. Reported rather than passed silently: nothing to compare is not a clean substrate.
+
+=== lint ===
+--- lint: ok
+
+=== types ===
+--- types: ok
+
+=== tests ===
+--- tests: ok
+
+=== manifest ===
+phase:                        P0
+rows total:                   32
+rows built:                   32
+rows open:                    0
+spec sections without a row:  0
+rows without a spec section:  0
+failures:                     0
+--- manifest: ok
+
+=== stubs ===
+--- stubs: ok
+
+=== spec-isolation ===
+--- spec-isolation: ok
+
+=== imports ===
+--- imports: ok
+
+=== attribution ===
+    clean over 49 record(s)
+--- attribution: ok
+
+=== fixtures ===
+--- fixtures: ok
+
+=== substrate-purity ===
+--- substrate-purity: ok
+
+============================================================
+GATE GREEN -- 10 stages passed
+```
+
+---
+
 Every Gate 0 criterion in `docs/deep_dives/P0_scaffold.md` §12 is met. The green gate is itself
 the completeness, attribution and `DEFERRALS.md` proof — those are three of its ten stages.
 
