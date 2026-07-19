@@ -36,7 +36,102 @@ Without this file, the next session re-walks the same dead end. That is a wasted
 
 ## Entries
 
-*None yet — the build has not started.*
+### DE-001 — `[TEST]` — Word-boundary matching for the kill gate's engine vocabulary
+
+**Session:** 2 · **Phase:** P0 · **Date:** 2026-07-19
+
+**What was tried:**
+`check_substrate_purity.scan_vocabulary` matched each banned term with `\bTERM\b`,
+case-insensitively, reasoning that word boundaries prevent `daily` from firing inside
+unrelated identifiers.
+
+**Why it failed:**
+`\bsquare_off\b` **does not match `square_off_at`**. `\b` requires a non-word character
+after `off`, and `_` is a word character. The planted fixture added
+`square_off_at: str | None = None` to `src/lab/ledger/schema.py` and the checker reported
+clean on it.
+
+This is the realistic shape of the failure, not a contrived one: engine vocabulary enters a
+substrate as a *field name*, not as a bare word. The rule matters because the kill gate is
+the mechanism behind Constitution S1 — a false negative there ships a contaminated substrate
+under two engines, and it is discovered, if ever, by whoever audits the ledger.
+
+**Evidence:**
+`python tools/check_substrate_purity.py --root tests/completeness/fixtures/substrate_purity`
+reported 3 findings and omitted `square_off`. After the fix: 5 findings, including it.
+Pinned by `test_substrate_purity_rejects_engine_vocabulary`, which asserts `'square_off'`
+explicitly with the message *"a suffixed identifier slipped through the kill gate"*.
+
+**Would it ever work?**
+Permanently dead for identifier-like terms. Substring matching, case-insensitive, is correct
+here: §9.2b says *anywhere in the substrate*, and on a kill gate a false positive costs an
+argument while a false negative costs the premise of the project.
+
+**Do not retry unless:** never. The one term that *does* need word-boundary, case-sensitive
+matching is `MIS` — as a case-insensitive substring it fires on "mismatch", "permission" and
+"dismiss", and a kill gate that cries wolf on ordinary English is one somebody disables
+before Gate 5.
+
+---
+
+### DE-002 — `[TEST]` — Grepping a file for the defect its own comments describe
+
+**Session:** 2 · **Phase:** P0 · **Date:** 2026-07-19
+
+**What was tried:**
+`test_commit_msg_hook_uses_no_gnu_only_sed_extension` asserted `"sed -i" not in hook` and
+`"/Id" not in hook`, reading the whole file.
+
+**Why it failed:**
+The rewritten hook's comment block **explains the defect it replaced**, and therefore quotes
+`sed -i.bak -E '/.../Id'` verbatim. The test flagged the explanation as the offence. The
+only ways to make it pass were to delete the explanation — losing the reason the code looks
+the way it does — or to weaken the assertion.
+
+This is DE-000l's mistake at small scale: **scanning text when the subject is behaviour.**
+It recurs because it is always the cheapest thing to write.
+
+**Evidence:** the test failed on a hook that was already correct and already portable.
+
+**Would it ever work?** Yes, and it now does: comment lines are stripped before the
+assertion, so the check reads executable content only. It also gained a positive assertion
+(`"grep" in executable`) so that deleting the implementation entirely does not pass.
+
+**Do not retry unless:** you are checking a property of *text*. For properties of *code*,
+strip comments — or better, execute it.
+
+---
+
+### DE-003 — `[TEST]` — Asserting local git config in a test that must survive a fresh clone
+
+**Session:** 2 · **Phase:** P0 · **Date:** 2026-07-19
+
+**What was tried:**
+`test_hooks_path_set_before_first_commit` asserting `git config --get core.hooksPath ==
+".githooks"`, the literal reading of §3.1 and failure case 19.
+
+**Why it failed:**
+`core.hooksPath` is **working-copy state and leaves no trace in a repository's history.**
+Every CI runner is a fresh clone and has none, so the test would have gone red on all three
+legs of the §5.2 matrix while the invariant it names was perfectly intact — a false failure
+that teaches the next agent the test is unreliable, which is how a real failure later gets
+waved through.
+
+Worse, the literal claim is *unverifiable after the fact by anyone*: nothing distinguishes a
+repository where the config was set before the first commit from one where it was set after.
+
+**Evidence:** reasoning, plus the observation that `git clone` copies no local config.
+
+**Would it ever work?** Not as stated. What is checkable is the invariant's **shadow** — the
+observable consequences that survive cloning:
+
+  * `.githooks/commit-msg` is present in the **first commit**, at index mode `100755`
+  * the first commit's message carries no attribution trailer
+
+A hook wired up after the first commit cannot produce both. Recorded as D-006.
+
+**Do not retry unless:** the test is scoped to a developer machine and is not in CI — at
+which point it is not a gate.
 
 ---
 
