@@ -22,10 +22,12 @@ import sys
 from pathlib import Path
 
 import check_attribution
+import check_fixture_provenance
 import check_import_graph
 import check_manifest
 import check_no_stubs
 import check_spec_isolation
+import check_substrate_purity
 import pytest
 
 from tests.completeness.registry import CHECKERS, FIXTURE_ROOT, REPO_ROOT, Checker
@@ -665,3 +667,185 @@ def test_attribution_rejects_a_tracked_claude_config() -> None:
 
     assert findings == [], findings
     assert "CLAUDE.md" in (REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
+
+
+# --------------------------------------------------------------------------
+# check_fixture_provenance
+# --------------------------------------------------------------------------
+
+
+def test_fixture_provenance_rejects_bad_hash() -> None:
+    """Section 9.2: a declared blob hash that does not match the file.
+
+    A gate fixture that can be edited after declaration is not a gate. The
+    missing-derivation defect is asserted alongside, because a fixture with no
+    shown arithmetic cannot be told apart from one the engine produced.
+    """
+    report = check_fixture_provenance.check(FIXTURE_ROOT / "fixture_provenance")
+
+    assert not report.ok
+    joined = "\n".join(report.findings)
+    assert "blob hash mismatch" in joined
+    assert "no derivation document" in joined
+
+
+def test_fixture_provenance_accepts_a_correct_declaration() -> None:
+    """The negative control: hash matches, derivation present."""
+    report = check_fixture_provenance.check(FIXTURE_ROOT / "fixture_provenance_clean")
+
+    assert report.ok, report.findings
+    assert report.declarations == 1, "the control is vacuous if nothing was declared"
+
+
+def test_fixture_provenance_blob_sha_agrees_with_git(tmp_path: Path) -> None:
+    """The hash is git's, computed git's way.
+
+    A checker using a different hash than the one ACCEPTANCE.md records would
+    reject every honest declaration, so this is pinned against `git hash-object`
+    rather than against itself.
+    """
+    target = tmp_path / "fixture.csv"
+    target.write_bytes(b"scenario,qty\nbuy,100\n")
+
+    expected = subprocess.run(
+        ["git", "hash-object", str(target)],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+
+    assert check_fixture_provenance.blob_sha(target) == expected
+
+
+def test_fixture_provenance_rejects_a_fixture_that_postdates_the_engine(tmp_path: Path) -> None:
+    """Section 11.2, on a real history: fixtures land in an EARLIER PR.
+
+    Built as an actual repository rather than a text fixture because ancestry is
+    the one assertion that cannot be faked with a file -- it is a fact about
+    commit order, and the only honest way to test it is to create the wrong
+    order and watch the checker object.
+    """
+
+    def git(*args: str) -> None:
+        subprocess.run(["git", "-C", str(tmp_path), *args], check=True, capture_output=True)
+
+    git("init", "-b", "main")
+    git("config", "user.email", "operator@example.com")
+    git("config", "user.name", "Operator")
+
+    engine = tmp_path / "engine.py"
+    engine.write_text("def run() -> int:\n    return 1\n", encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-m", "feat: the engine, committed first")
+
+    gates = tmp_path / "gates"
+    gates.mkdir()
+    fixture = gates / "case_a.csv"
+    fixture.write_text("scenario,qty\nbuy,100\n", encoding="utf-8")
+    (gates / "case_a_derivation.md").write_text("Derived by hand.\n", encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-m", "test: the fixture, committed after the engine it judges")
+
+    (tmp_path / "ACCEPTANCE.md").write_text(
+        "<!-- gate_fixtures -->\n\n```yaml\n"
+        "- id: GATE4.LATE\n"
+        "  path: gates/case_a.csv\n"
+        f"  blob_sha: {check_fixture_provenance.blob_sha(fixture)}\n"
+        "  derivation: gates/case_a_derivation.md\n"
+        "  engine_path: engine.py\n"
+        "```\n",
+        encoding="utf-8",
+    )
+
+    report = check_fixture_provenance.check(tmp_path)
+
+    assert not report.ok
+    assert any("does not predate the engine" in f for f in report.findings), report.findings
+
+
+def test_fixture_provenance_reports_zero_declarations_on_this_repo() -> None:
+    """P0 declares no gate fixtures, and says so rather than passing in silence."""
+    report = check_fixture_provenance.check(REPO_ROOT)
+
+    assert report.ok
+    assert report.declarations == 0
+
+
+# --------------------------------------------------------------------------
+# check_substrate_purity
+# --------------------------------------------------------------------------
+
+
+def test_substrate_purity_rejects_engine_vocabulary() -> None:
+    """Section 9.2b, and Constitution S1. The kill gate's automatic failure.
+
+    `square_off_at` is asserted explicitly. Word-boundary matching misses it,
+    and a suffixed identifier is how this vocabulary actually arrives -- which
+    makes it precisely the false negative the kill gate cannot afford.
+    """
+    report = check_substrate_purity.check(FIXTURE_ROOT / "substrate_purity")
+
+    assert not report.ok
+    joined = "\n".join(report.findings)
+    assert "'intraday'" in joined
+    assert "'engine_id =='" in joined
+    assert "'isinstance(engine'" in joined
+    assert "'square_off'" in joined, "a suffixed identifier slipped through the kill gate"
+
+
+def test_substrate_purity_accepts_an_engine_agnostic_change() -> None:
+    """The negative control: a real substrate change that names no engine."""
+    report = check_substrate_purity.check(FIXTURE_ROOT / "substrate_purity_clean")
+
+    assert report.ok, report.findings
+    assert report.added_lines > 0, "the control is vacuous if the diff was empty"
+
+
+def test_substrate_purity_does_not_fire_on_ordinary_english() -> None:
+    """MIS is a product code, not three letters. Case-sensitive, whole word.
+
+    As a case-insensitive substring it fires on "mismatch", "permission" and
+    "dismiss". A kill gate that cries wolf on ordinary English is a kill gate
+    somebody disables before Gate 5, and then it is not there at Gate 5.
+    """
+    innocent = [
+        check_substrate_purity.AddedLine("src/lab/core/types.py", "    # hash mismatch is fatal"),
+        check_substrate_purity.AddedLine("src/lab/core/types.py", "    raise PermissionError"),
+        check_substrate_purity.AddedLine("src/lab/ledger/store.py", "    dismiss_the_index()"),
+    ]
+    guilty = [
+        check_substrate_purity.AddedLine("src/lab/costs/schedule.py", "    product = 'MIS'"),
+    ]
+
+    assert check_substrate_purity.scan_vocabulary(innocent) == []
+    assert check_substrate_purity.scan_vocabulary(guilty)
+
+
+def test_substrate_purity_does_not_scan_diff_headers() -> None:
+    """A filename is not an added line.
+
+    Otherwise a diff touching a file whose own name carries engine vocabulary
+    reports a violation on the strength of its header, and every legitimate
+    change to that file becomes unmergeable.
+    """
+    diff = (
+        "diff --git a/src/lab/costs/daily_schedule.py b/src/lab/costs/daily_schedule.py\n"
+        "--- a/src/lab/costs/daily_schedule.py\n"
+        "+++ b/src/lab/costs/daily_schedule.py\n"
+        "@@ -1,2 +1,3 @@\n"
+        "+RATE = 15\n"
+    )
+
+    lines = check_substrate_purity.parse_added_lines(diff)
+
+    assert [line.text for line in lines] == ["RATE = 15"]
+    assert lines[0].path == "src/lab/costs/daily_schedule.py"
+    assert check_substrate_purity.scan_vocabulary(lines) == []
+
+
+def test_substrate_purity_is_inert_until_the_tag_exists() -> None:
+    """Ships in P0, arms at Gate 4. Inertness is reported, never passed silently."""
+    report = check_substrate_purity.check(REPO_ROOT)
+
+    assert report.inert
+    assert report.ok
