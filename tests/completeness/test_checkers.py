@@ -466,36 +466,124 @@ def test_spec_isolation_classifies_by_prefix_not_substring() -> None:
     assert report.spec == ["docs/deep_dives/P0_scaffold.md"]
 
 
-def test_spec_isolation_bootstrap_exception_is_open_on_this_repo() -> None:
-    """Section 5.4, on the real tree, where the exception is currently load-bearing.
+_FIXTURE_CI = """name: ci
+on:
+  pull_request:
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ok
+"""
 
-    Session 1 predicted this exception would never have to deploy, reasoning
-    that the phase branch would carry no SPEC at all. Amendments A-001 to A-003
-    edited a frozen deep dive on this branch, so the diff carries SPEC and CODE
-    together and the exception is doing real work. The prediction is recorded as
-    falsified in DEAD_ENDS.md.
+
+def _bootstrap_repo(root: Path, *, main_carries_the_gate: bool) -> Path:
+    """Build a repository whose `origin/main` does or does not produce `gate`.
+
+    Synthetic rather than live. The original pair of tests asserted against this
+    repository's real `origin/main`, which was correct for exactly as long as
+    PR #1 was open: merging it put a `gate` workflow on `main` and permanently
+    falsified them. A test that encodes a transient precondition expires the
+    moment the precondition is met -- and here that moment was the merge the
+    tests existed to authorise.
+
+    The exception's history is not lost by moving to fixtures: that it genuinely
+    opened for PR #1 is recorded by the merged PR itself. What the fixtures make
+    durable is the *mechanism* -- arm, then close -- which is the part that has
+    to keep working for every PR after this one.
     """
-    report = check_spec_isolation.check(REPO_ROOT)
 
-    assert report.mixed, "expected the P0 branch to carry both tiers"
-    assert report.exception_applies
-    assert report.ok
+    def git(*args: str) -> None:
+        subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
+
+    root.mkdir(parents=True, exist_ok=True)
+    git("init", "-b", "main")
+    git("config", "user.email", "operator@example.com")
+    git("config", "user.name", "Operator")
+
+    (root / "README.md").write_text("base\n", encoding="utf-8")
+    if main_carries_the_gate:
+        workflows = root / ".github" / "workflows"
+        workflows.mkdir(parents=True)
+        (workflows / "ci.yml").write_text(_FIXTURE_CI, encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-m", "chore: base")
+
+    # `origin/main` is what the checker interrogates, so the ref is what the
+    # fixture has to establish -- not a remote, which would need a network.
+    git("update-ref", "refs/remotes/origin/main", "HEAD")
+
+    # The PR head: a diff carrying SPEC and CODE together, plus a log.
+    (root / "CONSTITUTION.md").write_text("amended\n", encoding="utf-8")
+    (root / "HANDOFF.md").write_text("log\n", encoding="utf-8")
+    source = root / "src" / "lab"
+    source.mkdir(parents=True, exist_ok=True)
+    (source / "thing.py").write_text("VALUE = 1\n", encoding="utf-8")
+    if not main_carries_the_gate:
+        workflows = root / ".github" / "workflows"
+        workflows.mkdir(parents=True, exist_ok=True)
+        (workflows / "ci.yml").write_text(_FIXTURE_CI, encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-m", "feat: phase work carrying both tiers")
+    return root
 
 
-def test_spec_isolation_bootstrap_exception_self_closes() -> None:
-    """The same diff, once origin/main produces the `gate` check, is denied.
+def test_spec_isolation_bootstrap_exception_arms_before_ci_exists(tmp_path: Path) -> None:
+    """Section 5.4: the FIRST PR may mix the tiers, and only the first.
 
-    This is the test that proves the exception is narrow rather than permanent.
-    An exception somebody has to remember to switch off is a hole with a
-    reminder attached; this one closes on a condition the repository reaches on
-    its own, and the closing is asserted rather than asserted-about.
+    Branch protection requires a `gate` check that no workflow produces until
+    `ci.yml` exists, so no PR -- spec or code -- can merge until one carrying CI
+    does. Section 11.1 is unenforceable during P0 by construction, and this is
+    the precondition under which the exception legitimately opens.
+
+    Asserted against a repository whose `origin/main` has no workflow at all,
+    which is the state this repository was in until PR #1 merged.
     """
-    permitted = check_spec_isolation.check(REPO_ROOT)
-    denied = check_spec_isolation.check(REPO_ROOT, assume_gate_on_main=True)
+    repo = _bootstrap_repo(tmp_path / "arming", main_carries_the_gate=False)
 
-    assert permitted.ok
-    assert denied.mixed
+    assert check_spec_isolation.bootstrap_exception_applies(repo) is True
+
+    report = check_spec_isolation.check(repo)
+    assert report.mixed, "the fixture must carry both tiers or it proves nothing"
+    assert report.ok, "the bootstrap exception failed to open for the first PR"
+
+
+def test_spec_isolation_bootstrap_exception_self_closes(tmp_path: Path) -> None:
+    """The same mixed diff is DENIED once `origin/main` produces `gate`.
+
+    This is what makes the exception narrow rather than permanent. An exception
+    somebody has to remember to switch off is a hole with a reminder attached;
+    this one closes on a condition the repository reaches on its own, and the
+    closing is asserted rather than asserted-about.
+
+    The two fixtures differ in exactly one respect -- whether `origin/main`
+    carries a workflow defining the `gate` job -- so the change in verdict is
+    attributable to that and to nothing else.
+    """
+    armed = _bootstrap_repo(tmp_path / "armed", main_carries_the_gate=False)
+    closed = _bootstrap_repo(tmp_path / "closed", main_carries_the_gate=True)
+
+    permitted = check_spec_isolation.check(armed)
+    denied = check_spec_isolation.check(closed)
+
+    assert permitted.mixed, "the armed fixture must carry both tiers"
+    assert denied.mixed, "the closed fixture must carry both tiers"
+    assert permitted.ok, "the exception did not open under its own precondition"
+
+    assert check_spec_isolation.bootstrap_exception_applies(closed) is False
     assert not denied.ok, "the exception did not close; it is permanent, not narrow"
+
+
+def test_spec_isolation_exception_is_closed_on_this_repository() -> None:
+    """Section 11.1 now binds absolutely. PR #1 was the last that could mix tiers.
+
+    `origin/main` carries `ci.yml` defining the `gate` job, so the bootstrap
+    exception is spent. Asserted directly because it is the durable invariant
+    every subsequent PR depends on, and because its opposite -- an exception that
+    silently stayed open -- would be invisible until someone shipped a manifest
+    edit alongside the code it judges.
+    """
+    assert check_spec_isolation.bootstrap_exception_applies(REPO_ROOT) is False
 
 
 def test_spec_isolation_refuses_a_tree_with_no_diff_to_judge(tmp_path: Path) -> None:

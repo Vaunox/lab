@@ -172,20 +172,20 @@ nothing in P0 (zero skips exist) and is behaviourally identical under every cand
 
 ## Last `python tools/gate.py`
 
-**Run at:** 2026-07-19 · **Commit:** `e77f098` · **Exit code:** `0`
+**Run at:** 2026-07-19 · **Commit:** `824c1ef` · **Branch:** merged `main` + the durable-test fix
+· **Exit code:** `0`
 
-Piped verbatim, after amendment A-004. Ten of ten stages green. Subprocess output interleaves
-ahead of the stage banners because those subprocesses write straight to the terminal while
-Python's own stdout is block-buffered under redirection — an artifact of piping, not of order.
+Piped verbatim. This is the run the `gate-0-scaffold` tag is cut against: a fresh checkout of
+the tag reports **GATE GREEN**, which is the whole point of tagging a deliverable snapshot.
 
 ```
 All checks passed!
 Success: no issues found in 26 source files
-........................................................................ [ 80%]
-..................                                                       [100%]
-90 passed in 2.02s
+........................................................................ [ 77%]
+.....................                                                    [100%]
+93 passed in 4.32s
 check_no_stubs: clean over 13 file(s)
-check_spec_isolation: spec and code both touched, permitted by the section 5.4 bootstrap exception -- no workflow on origin/main produces the 'gate' check yet. This exception closes itself the moment one does.
+check_spec_isolation: clean -- spec 0, code 0, logs 0 (exempt)
 check_import_graph: clean -- 0 rule(s) over 4 module(s)
 check_fixture_provenance: no gate fixtures declared in ACCEPTANCE.md. That is the expected P0 state -- the tool ships before the phase it polices, so the judge is never built in the same session as the defendant.
 check_substrate_purity: inert -- no substrate-frozen tag exists yet. The kill gate arms at Gate 4 and fires at Gate 5. Reported rather than passed silently: nothing to compare is not a clean substrate.
@@ -219,7 +219,7 @@ failures:                     0
 --- imports: ok
 
 === attribution ===
-    clean over 18 record(s)
+    clean over 43 record(s)
 --- attribution: ok
 
 === fixtures ===
@@ -232,14 +232,18 @@ failures:                     0
 GATE GREEN -- 10 stages passed
 ```
 
-**Read the tally, not the prose:** `rows built: 32`, `rows open: 0`, `failures: 0`, `spec
-sections without a row: 0`, `rows without a spec section: 0`.
+**Why this run and not the one on PR #1's head.** Merging PR #1 put `ci.yml` on `main`, which
+**closed the section 5.4 bootstrap exception** — exactly as designed, and proved in advance by
+`test_spec_isolation_bootstrap_exception_self_closes`. Two tests had asserted the exception was
+*currently open on this repository*, and the closing falsified them, so the merge result
+reported `GATE RED -- failed stages: tests` on a fresh checkout. The deliverables were complete;
+the tests had encoded a precondition that expired at the moment it was met. Rewritten against
+synthetic repositories, preserving both halves of the proof — that the exception **arms** under
+the bootstrap precondition and that it **self-closes** once `main` carries the gate. See DE-006.
 
-**The prior red is preserved in the Session 2 log below, deliberately.** The gate was red on
-six `call_site` rows for the whole of the build, and it went green because the *operator*
-amended the spec — not because the builder found a way to satisfy it. That distinction is the
-entire subject of §11, and a ledger that overwrote the red would have erased the evidence of
-the one thing worth proving.
+**Section 11.1 now binds absolutely.** PR #1 was the last PR permitted to carry spec and code
+together, and `test_spec_isolation_exception_is_closed_on_this_repository` asserts the exception
+is spent.
 
 ## Branch protection — `gh api` response, verbatim
 
