@@ -277,8 +277,10 @@ class _Scanner(ast.NodeVisitor):
                 decorator.lineno,
                 f"{node.name}: @{name} must cite a DIVERGENCES.md entry, and "
                 "DIVERGENCES.md defines no citable ID, so no skip can currently "
-                "be justified. Fail-closed pending an operator ruling; see the "
-                "blocking question in HANDOFF.md",
+                "be justified. Fail-closed pending an operator ruling -- see "
+                "Q-002 in PROJECT_STATE.md, 'Blocked / needs a decision'. Note "
+                "that this rule is INERT where it matters: SCAN_ROOTS excludes "
+                "tests/, so a skip in a test is never seen. Q-002 owns that too",
             )
 
     def _check_docstring(self, node: ast.AST) -> None:
