@@ -61,8 +61,13 @@ All seven checkers are built, each with a planted violation **and** a negative c
 operator mid-session and resolved as amendment **A-004** (see *Operator rulings*). Nothing is
 stubbed, nothing was skipped, and no call site was manufactured.
 
-**P0 is code-complete and its gate is green.** What remains is procedural: the phase PR is
-open and awaiting operator review, and the `gate-0-scaffold` tag is cut on merge.
+**P0 is code-complete, its gate is green, and CI is green on all three platforms.**
+[PR #1](https://github.com/Vaunox/lab/pull/1) is open, `mergeStateStatus: CLEAN`, and
+**awaiting operator review — the merge was deliberately not taken.** The `gate-0-scaffold`
+tag is cut on merge, not before.
+
+The first CI run caught two real defects that the local gate could not see, both
+environment-shaped. See the *first CI run* addendum at the end of this file, and DE-004/DE-005.
 
 ## What is done
 
@@ -790,3 +795,47 @@ failures, all Q-003.
 - `[OPERATOR]` **Push authorized** for `phase/p0-scaffold`, after the amendment landed and the
   gate went green, so the phase PR opens green rather than red. **Merge is not authorized** —
   the PR opens and stops for operator review.
+
+### Addendum — the first CI run, and what it caught
+
+**`.github/workflows/ci.yml` has now executed.** Three runs were needed to go green, and the
+two failures are the most valuable evidence this session produced, because **both were
+invisible locally and both were environment-shaped.**
+
+**Run 1 — `GATE RED` on all three legs.** `P0.BOOT.GIT: core.hooksPath is '', expected
+'.githooks'`. This is **DE-003 one level over**: the finding had been diagnosed, written up,
+and fixed in `test_hooks_path_set_before_first_commit` earlier in the same session, and the
+identical assertion in `check_manifest.check_infra` was left standing — because the dead end
+was filed against *the test it was noticed in* rather than against *the invariant*. The local
+gate was green on the same commit, because a developer machine is exactly the environment
+where the wrong assertion holds. → **DE-004**, whose lesson is the general one: when a dead
+end is found, grep for every other site with the same shape before closing it.
+
+**Run 2 — `checks (windows-latest)` passed, both POSIX legs failed.**
+`git commit -am` restages tracked files from the working tree and reverts a mode that
+`git update-index --chmod=+x` had only staged. Windows cannot reproduce it, because git does
+not read filesystem executable bits there. → **DE-005**.
+
+**Run 3 — all four checks green.**
+
+```
+checks (macos-latest)     pass
+checks (ubuntu-latest)    pass
+checks (windows-latest)   pass
+gate                      pass
+```
+
+**D-007 is validated in production, not merely against the YAML.** The aggregate job produced
+a status context named exactly `gate` — the literal string branch protection requires — and
+on runs 1 and 2 it **failed closed** rather than being skipped, which is the property the
+`if: always()` plus explicit success test was written for. A matrix job named `gate` would
+have produced `gate (ubuntu-latest)` and friends and never the bare context, leaving `main`
+permanently unmergeable behind a green run.
+
+**`gh pr view 1 --json mergeStateStatus` reports `CLEAN`.** The PR is mergeable and has
+**not** been merged: the operator authorized the push and the PR, and reserved the merge.
+
+**The OS matrix paid for itself on its first run.** Section 5.2 justifies it by the ledger
+lock, which does not exist yet — and it still caught two real defects that no amount of local
+running would have surfaced. Both were of the same class the matrix exists to catch: code
+that is correct on the machine it was written on.
