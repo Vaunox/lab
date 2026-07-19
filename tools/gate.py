@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import check_manifest  # noqa: E402
+import check_manifest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
