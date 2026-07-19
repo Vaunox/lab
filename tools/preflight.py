@@ -7,9 +7,9 @@ builder states it and stops.
 **`gh auth status` is the one thing the builder cannot fix.** Authentication is
 the operator's; the builder does not handle credentials, does not run
 `gh auth login`, and does not touch a token. On that failure it prints the remedy
-and stops -- it does not proceed with a local-only repository and add the remote
-later, because later never comes and a phase merged with no protected `main`
-means the section 3.3 invariant was never true.
+and stops -- it does not proceed with a local-only repository intending to add the
+remote afterwards, because that intention is never acted on, and a phase merged
+with no protected `main` means the section 3.3 invariant was never true.
 
 **Interpreter names are probed, never assumed** (operator ruling R-001). Section
 3.0 writes `python3 --version` illustratively; on Windows -- the operator's
