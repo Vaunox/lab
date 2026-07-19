@@ -102,7 +102,7 @@ def stage_attribution(root: Path) -> bool:
     """
     try:
         commits = check_attribution.read_history(root)
-    except check_attribution.AttributionError_ as exc:
+    except check_attribution.HistoryUnavailableError as exc:
         print(f"    REFUSED TO RUN: {exc}", file=sys.stderr)
         return False
 

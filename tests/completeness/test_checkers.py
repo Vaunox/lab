@@ -17,6 +17,7 @@ sign. Both fixtures ship.
 from __future__ import annotations
 
 import ast
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -657,7 +658,7 @@ def test_attribution_reads_real_git_history_not_the_fixture_seam() -> None:
 
 def test_attribution_refuses_a_tree_with_no_history(tmp_path: Path) -> None:
     """No history is not a clean history."""
-    with pytest.raises(check_attribution.AttributionError_):
+    with pytest.raises(check_attribution.HistoryUnavailableError):
         check_attribution.check(tmp_path)
 
 
@@ -849,3 +850,107 @@ def test_substrate_purity_is_inert_until_the_tag_exists() -> None:
 
     assert report.inert
     assert report.ok
+
+
+# --------------------------------------------------------------------------
+# .githooks/commit-msg
+# --------------------------------------------------------------------------
+
+
+def _locate_bash() -> str | None:
+    """Find bash, including the copy Git for Windows ships off-PATH.
+
+    `shutil.which("bash")` finds nothing under a stock Windows Python: Git for
+    Windows installs `bash.exe` beside `git.exe` but only puts `cmd/` on PATH.
+    Treating that as "no bash" would quietly turn the one test R-004 requires to
+    EXECUTE the hook into a test that never runs on the operator's own platform.
+    """
+    found = shutil.which("bash")
+    if found:
+        return found
+
+    git = shutil.which("git")
+    if git is None:
+        return None
+    for candidate in (
+        Path(git).parent.parent / "bin" / "bash.exe",
+        Path(git).parent.parent.parent / "bin" / "bash.exe",
+    ):
+        if candidate.exists():
+            return str(candidate)
+    return None
+
+
+def test_commit_msg_hook_strips_trailer(tmp_path: Path) -> None:
+    """Section 4.2, and operator ruling R-004: the hook is EXECUTED, not read.
+
+    Session 1 smoke-tested this by hand under Git Bash and inspected the source,
+    which is why the portability defect survived: the old implementation used
+    sed's `I` address modifier, a GNU extension that BSD sed rejects, so on
+    macos-latest the hook failed instead of stripping. A test that reads the
+    script cannot see that. A test that runs it can, and it runs on all three
+    legs of the section 5.2 matrix.
+
+    The message body deliberately mentions the vendor and must survive. Section
+    4.3 draws the line at authorship, not topic -- a commit may legitimately say
+    "fix the Claude API client", and a hook that mangles the body has started
+    censoring subject matter.
+    """
+    bash = _locate_bash()
+    assert bash, (
+        "bash is required to execute the commit-msg hook. It is present on all "
+        "three CI runners and in Git for Windows; this is a real failure, not a "
+        "reason to skip"
+    )
+
+    message = tmp_path / "COMMIT_EDITMSG"
+    message.write_text(
+        "feat: a change\n"
+        "\n"
+        "Body mentioning the Claude API, which is topic and must survive.\n"
+        "\n"
+        "Co-Authored-By: Claude <noreply@anthropic.com>\n"
+        "co-authored-by: someone <a@b.c>\n"
+        "Generated with an assistant\n"
+        "Signed-off-by: Vaunox <nevesia26@gmail.com>\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [bash, str(REPO_ROOT / ".githooks" / "commit-msg"), str(message)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    stripped = message.read_text(encoding="utf-8")
+
+    assert "Co-Authored-By" not in stripped
+    assert "co-authored-by" not in stripped
+    assert "Generated with" not in stripped
+
+    assert "feat: a change" in stripped
+    assert "Claude API, which is topic and must survive" in stripped
+    assert "Signed-off-by: Vaunox" in stripped
+
+
+def test_commit_msg_hook_uses_no_gnu_only_sed_extension() -> None:
+    """The specific defect R-004 named, pinned so it cannot return.
+
+    `sed -i` and the `I` address modifier are both GNU-only. Their absence is
+    asserted directly because the executing test above passes on Linux either
+    way -- the platform where the defect is invisible is the platform most runs
+    happen on.
+    """
+    # Comments are stripped first. The hook's own comment block explains the
+    # defect it replaced and therefore quotes `sed -i` and `/Id` verbatim -- a
+    # naive grep over the whole file flags the explanation as the offence. That
+    # is DE-000l's mistake in miniature: scanning text when the subject is
+    # behaviour.
+    hook = (REPO_ROOT / ".githooks" / "commit-msg").read_text(encoding="utf-8")
+    executable = "\n".join(line for line in hook.splitlines() if not line.lstrip().startswith("#"))
+
+    assert "sed -i" not in executable
+    assert "/Id" not in executable
+    assert "grep" in executable, "the portable implementation is missing entirely"
