@@ -19,11 +19,22 @@ fixture-of-fixtures, because building it in P4 -- the phase it polices -- would
 mean building the judge and the defendant in the same session.
 
 **Declaration format.** `ACCEPTANCE.md` carries a `<!-- gate_fixtures -->` marker
-followed by a fenced yaml list. That format is a builder decision recorded for
-operator review (D-004 in HANDOFF.md): section 9.2 fixes the three assertions but
-does not fix the syntax that carries them, and P4 is where the first real
-declaration lands. Zero declarations is the correct and expected P0 state, and it
-is reported explicitly rather than passing in silence.
+followed by a fenced yaml list. That format is a builder decision awaiting P4's
+confirmation -- see D-004 in `PROJECT_STATE.md`, "Blocked / needs a decision".
+Section 9.2 fixes the three assertions but not the syntax that carries them, and
+P4 is where the first real declaration lands.
+
+**KNOWN DEFECT, and it is this tool's own: with no marker present this checker
+FAILS OPEN.** `parse_declarations` returns an empty list, `check` reports zero
+declarations, and the process exits 0 -- so real hand-derived fixtures sitting on
+disk with no declaration block pass, under a message asserting the P0 rationale
+below. It cannot tell *no fixtures exist* from *fixtures exist and nobody
+declared them*, which makes the checker guarding "the engine is never its own
+oracle" a no-op at precisely the phase it was built for. D-004 owns the fix, and
+requires it be a fix to the checker rather than to the declaration alone.
+
+Zero declarations is nonetheless the correct and expected P0 state, and it is
+reported explicitly rather than passing in silence.
 """
 
 from __future__ import annotations
