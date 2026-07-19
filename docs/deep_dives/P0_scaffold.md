@@ -8,7 +8,7 @@
 
 ## 1. Scope
 
-The GitHub remote, branch protection, attribution suppression, the project scaffold, and **the six checkers that police every phase after this one** — including this one.
+The GitHub remote, branch protection, attribution suppression, the project scaffold, and **the seven checkers that police every phase after this one** — including this one.
 
 **No `lab/` domain code is written in this phase** beyond the package skeleton, config, and logging. P0 builds the judge. P1 builds the first thing to be judged.
 
@@ -223,7 +223,7 @@ pyproject.toml            # deps, ruff, black, mypy (strict), pytest, mutmut
 tools/gate.py             # the gate entry point (no make on Windows)
 src/lab/__init__.py       # __version__ only
 tests/                    # unit/ integration/ adversarial/ completeness/
-tools/                    # the six checkers
+tools/                    # the seven checkers
 ```
 
 **`mypy` runs strict.** Not "strict where convenient." The substrate's correctness argument leans on types, and a partially-typed substrate has the *appearance* of that argument without the substance.
@@ -287,9 +287,13 @@ The completeness gate. **This is the most important tool in the repository.**
 
 `function` · `method` · `class` · `protocol` · `enum` · `constant` · `exception` · `contextmanager` → resolve the dotted path by **AST walk of `src/`**, not by `importlib`.
 
+`type` → same AST walk. Satisfied by a module-level `NewType(...)` binding, a `TypeAlias` or bare type-alias assignment, or a class definition matching the dotted path.
+
 **Why AST and not import:** importing runs module-level code, which means a checker that can be made to pass by writing a clever `__getattr__`. AST inspection sees what is *written*, which is what the manifest is a claim about.
 
 `script` → the file exists and is executable.
+
+**The kind registry is closed, and an unrecognised `kind` is a hard error — never a skip.** A skip is the vacuous pass this tool exists to prevent, and an open-ended kind field is where a stub hides.
 
 ### 6.3 Call-site detection
 
@@ -471,7 +475,7 @@ rows:
     artifact: tools/preflight.py
     kind: script
     spec: "§3.0"
-    call_site: required
+    call_site: n/a
     certifying_test: tests/completeness/test_bootstrap.py::test_preflight_stops_on_missing_gh_auth
 
   - id: P0.BOOT.GIT
@@ -582,7 +586,7 @@ rows:
     call_site: required
     certifying_test: tests/unit/core/test_logging.py::test_structured_and_redacted
 
-  # ---- the six checkers ----
+  # ---- the seven checkers ----
   - id: P0.CHK.MANIFEST
     artifact: tools/check_manifest.py
     kind: script
@@ -703,7 +707,7 @@ rows:
 
 **Correctness gate**
 - Every test in the manifest passes.
-- **`test_every_checker_rejects_its_fixture` passes.** Each of the six rejects its planted violation. A checker that cannot fail has not been built.
+- **`test_every_checker_rejects_its_fixture` passes.** Each of the seven rejects its planted violation. A checker that cannot fail has not been built.
 
 **Completeness gate**
 - `check_manifest.py` validates **its own manifest** — every row exists, every `call_site: required` row is called, the loop closes both ways.
@@ -727,3 +731,13 @@ Tag `gate-0-scaffold`. The tag commit contains the complete deliverables.
 | Date | Section | Change | Reason |
 |---|---|---|---|
 | 2026-07-13 | — | Initial. Manifest frozen. | — |
+| 2026-07-18 | §11 | `P0.BOOT.PREFLIGHT`: `call_site: required` → `call_site: n/a` | `[OPERATOR]` A-001. No tracked file can honestly invoke `tools/preflight.py`. §5.1 enumerates the gate's stages exhaustively and preflight is not among them; §6.3 excludes the row's own certifying test; and §12's bootstrap gate already treats preflight as documentary evidence (*"Preflight passed, or the operator was told to run `gh auth login` and did"*). Preflight is a one-time session-0 script run by hand, and wiring it into `gate.py` or `ci.yml` to satisfy the field would fail on runners without `gh auth`, breaking the gate for outside contributors on a public repo — a call site manufactured to satisfy a checker, which is §2.2 inverted. Its three bootstrap siblings (`P0.BOOT.GIT`, `.REMOTE`, `.PROTECTION`) are all `n/a` for the same reason: their invoker is external to the repository. **`test_preflight_stops_on_missing_gh_auth` still ships and must pass** — `n/a` removes the external-caller requirement, not the test. |
+| 2026-07-18 | §6.2 | Add `type` to the kind registry, resolved by the same AST walk. State that the registry is closed and an unrecognised kind is a hard error. | `[OPERATOR]` A-002. Contradiction between two frozen specs: P1's frozen manifest uses `kind: type` six times (`lab.core.types.Paise`, `AsOf`, `DateRange`, `lab.ledger.schema.TrialDraft`, `TrialResult`, `lab.ledger.seal.SealToken`), which a checker written strictly to §6.2 would refuse on day one of P1. Resolved in favour of the document that already shipped the usage. Fail-closed behaviour is preserved and made explicit: unknown kinds do not pass leniently, because an open-ended kind field is where a stub hides. |
+| 2026-07-18 | §1, §5, §11, §12 | "six checkers" → "seven" (4 occurrences) | `[OPERATOR]` A-003. Stale prose count. The manifest enumerates **seven** checker scripts — manifest, stubs, spec-isolation, imports, fixtures, substrate-purity, attribution — and §9.2b states `check_substrate_purity.py` *"Ships in P0."* The §11 occurrence was a YAML section comment reading `# ---- the six checkers ----` directly above seven rows. Left uncorrected, a builder reading "six" ships `check_substrate_purity.py` **without a planted violation**, which is failure case 15 — the one §10 calls *"the one that matters."* The §12 edit raises the correctness gate from six planted violations to seven: strictly tightening, a ratchet in the safe direction. |
+
+**Amendment procedure followed:** §10.5 — the deep dive is amended with a dated entry, and the
+manifest row is changed citing it. Applied on `phase/p0-scaffold` within the bootstrap PR, which
+§5.4 / §11.3 designate as the one PR permitted to carry spec and code together; a separate
+spec-only PR is not viable during P0, because no PR can merge to `main` before `ci.yml` produces the
+required `gate` check. **§11.1 binds absolutely from the second PR onward**, and
+`check_spec_isolation.py` implements that exception narrowly and self-closingly (§8).
