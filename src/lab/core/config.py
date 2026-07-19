@@ -53,8 +53,8 @@ def _deep_merge(base: dict[str, Any], overlay: Mapping[str, Any]) -> dict[str, A
 
     Nested rather than top-level replacement: a layer that sets one key under
     `ledger` must not silently discard the rest of the `ledger` block. That kind
-    of loss is invisible at the call site and shows up as a default reappearing
-    three layers later.
+    of loss is invisible at the call site, and surfaces as a default quietly
+    reappearing several layers down the stack.
     """
     merged = deepcopy(base)
     for key, value in overlay.items():
@@ -125,8 +125,8 @@ def load_config(
     """Resolve configuration from the layered sources. Blueprint section 2.
 
     Precedence, lowest to highest: `default.yaml`, then `{env}.yaml`, then
-    `LAB_`-prefixed environment variables. Later layers override earlier ones key
-    by key rather than wholesale.
+    `LAB_`-prefixed environment variables. Each layer overrides the one beneath
+    it key by key rather than wholesale.
 
     An absent layer contributes nothing and is not an error -- `default.yaml` is
     the floor, and an environment that adds no overrides is the common case. An
