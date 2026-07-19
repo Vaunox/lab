@@ -177,6 +177,155 @@ local gate is not evidence of absence when the defect is environment-shaped.
 
 ---
 
+### DE-005 — `[TEST]` — `git commit -am` after `git update-index --chmod=+x`
+
+**Session:** 2 · **Phase:** P0 · **Date:** 2026-07-19
+
+**What was tried:**
+A fixture repository built in `tmp_path` staged a hook's executable bit and committed it in
+two steps: `git add -A`, `git commit -m ...`, `git update-index --chmod=+x <hook>`,
+`git commit -am ...`.
+
+**Why it failed:**
+On POSIX, **`git commit -a` restages every tracked file from the working tree**, overwriting
+the index entry `--chmod=+x` had just modified. The file on disk was written by
+`Path.write_text` and is not executable, so the mode reverts, nothing remains staged, and
+`git commit` exits 1 — surfacing as `CalledProcessError`, not as an assertion failure.
+
+**On Windows this cannot happen**, because git does not read filesystem executable bits there:
+the staged mode survives and the commit succeeds. The defect is therefore invisible on the
+platform the work was done on and fails on both other legs of the matrix.
+
+**Evidence:** `gh run view 29679799462 --log-failed` — `ubuntu-latest` and `macos-latest` both
+failed `test_manifest_infra_rejects_a_hooks_path_pointing_elsewhere`; `windows-latest` passed
+the same commit.
+
+**Would it ever work?** Not in that form. Stage the mode and commit in **one** step, no `-a`:
+`git add -A`, `git update-index --add --chmod=+x <hook>`, `git commit -m ...`.
+
+**Do not retry unless:** never. **`-a` and a staged index modification do not compose.** Any
+test manipulating git modes must commit from the index, never from the working tree.
+
+---
+
+### DE-006 — `[TEST]` — Asserting a transient precondition that the work itself removes
+
+**Session:** 2 · **Phase:** P0 · **Date:** 2026-07-19
+
+**What was tried:**
+Two tests pinned the §5.4 bootstrap exception against **live `origin/main`**:
+`test_spec_isolation_bootstrap_exception_is_open_on_this_repo` asserted
+`report.mixed and report.exception_applies` on the real repository, and
+`test_spec_isolation_bootstrap_exception_self_closes` asserted the same live diff was denied
+under `assume_gate_on_main=True`. Both passed, and were correct, while PR #1 was open.
+
+**Why it failed:**
+**Merging PR #1 put `ci.yml` on `main`, which closed the exception — and closing it was the
+entire purpose of the PR those tests were written to authorise.** Afterwards
+`bootstrap_exception_applies` returns False, and on `main` the `origin/main...HEAD` diff is
+empty so `report.mixed` is False too. Both fail on a fresh checkout of the merge result.
+
+The mechanism is a **self-consuming precondition**: a test encoding a transient state expires
+the moment that state changes, and here the state change *was the deliverable*. The irony is
+load-bearing — `..._self_closes` proved the closing mechanism worked, and then the mechanism
+it proved broke it.
+
+The consequence would have been permanent: `gate-0-scaffold` was to be cut on the merge
+result, and a fresh clone of that tag reported `GATE RED`. A tag whose stated job is *clone it
+and run the gate* would have shipped red, defended by a note in the handoff — "typed status is
+a claim" (§12.1), the exact pattern this project refuses.
+
+**Evidence:** `python -m pytest -q` on merged `main` at `824c1ef`: `2 failed, 90 passed`, while
+manifest, stubs, spec-isolation, imports, attribution, fixtures and substrate-purity were green.
+
+**Would it ever work?** Not against live state. Rewritten against **synthetic repositories the
+test builds itself**, differing in exactly one respect: whether `origin/main` carries a
+workflow defining the `gate` job. Both halves are preserved deliberately — that the exception
+**arms** under its precondition and that it **self-closes**. Collapsing to a bare "it is closed
+now" would delete the evidence it ever legitimately opened.
+
+**Do not retry unless:** never, for a precondition the project is actively working to remove.
+Ask before pinning live repository state: **"will the thing I am building make this assertion
+false?"** If yes, it belongs in a fixture. That the exception opened for PR #1 is recorded by
+the merged PR — history belongs there; tests are for mechanisms that must keep holding.
+
+---
+
+### DE-007 — `[CONSTRAINT]` — `pip install -e` inside a throwaway clone clobbers the real one
+
+**Session:** 2 · **Phase:** P0 · **Date:** 2026-07-19
+
+**What was tried:**
+Verifying the `gate-0-scaffold` tag by cloning it to a temp directory, running
+`pip install -e ".[dev]"` there, running the gate, then deleting the directory.
+
+**Why it failed:**
+The editable install is **per-interpreter, not per-directory.** Installing from the clone
+repointed the `lab` distribution at the clone's path, and deleting the clone left the working
+repository with `ModuleNotFoundError: No module named 'lab'` — surfacing later as two
+unrelated-looking collection errors on a branch where nothing about those modules had changed.
+
+The tag verification itself was valid; the damage was to the environment it ran from.
+
+**Evidence:** `python -m pytest` in the working repo immediately after the clone was removed:
+`ImportError ... No module named 'lab'`. `python -m pip install -e ".[dev]"` restored it.
+
+**Would it ever work?** Yes, in an isolated environment — verify a tag inside a fresh
+`python -m venv`, or accept reinstalling afterwards. CI is unaffected; each runner builds its
+own environment.
+
+**Do not retry unless:** the clone gets its own virtualenv. This recurs at every phase tag,
+because verifying a tag is green on a clean checkout is the right thing to do and is the reason
+the tag exists.
+
+---
+
+### DE-008 — `[TEST]` — `str.replace` as a document-editing primitive, with an unconditional success print
+
+**Session:** 2 · **Phase:** P0 · **Date:** 2026-07-19
+
+**What was tried:**
+Editing `HANDOFF.md` and `DEAD_ENDS.md` from helper scripts shaped like:
+
+```python
+text = path.read_text()
+text = text.replace(anchor, anchor + NEW_SECTION, 1)
+path.write_text(text)
+print("appended")
+```
+
+**Why it failed:**
+**`str.replace` returns the string unchanged when the anchor does not match. It does not
+raise.** The anchors were multi-line prose copied from the target document, and reflowing —
+a wrapped line, a changed dash — was enough to break the match. The script then wrote the
+file back byte-identical and **printed its success message anyway**, because the print was
+unconditional.
+
+Three entries were lost this way (**DE-005, DE-006, DE-007**) across three separate scripts,
+and the loss was silent in every case. It was found only because a later `grep -n "^### DE-"`
+showed the numbering jumping from DE-004 to the template. By then, **the merged body of PR #2
+already cited "DEAD_ENDS DE-006", which did not exist** — a dangling reference in public,
+permanent history.
+
+This is the project's own thesis turned on its author: *typed status is a claim; piped status
+is evidence.* The script **claimed** it had appended. Nothing verified it.
+
+**Evidence:** `grep -c "DE-007" DEAD_ENDS.md` → `0`, immediately after a run that printed
+`DE-007 added`. `git show --stat` on the same commit lists no change to `DEAD_ENDS.md`.
+
+**Would it ever work?** Only with verification. Two rules, both cheap:
+
+1. **Assert the edit landed** — `assert new != old`, or `assert marker in path.read_text()`
+   after writing. A write with no post-condition is a claim.
+2. **Prefer positional anchors to prose anchors.** Insert before a stable structural marker
+   (`## Template`, end of file) rather than before a paragraph whose wording may drift.
+
+**Do not retry unless:** the script fails loudly on a non-matching anchor. A silent no-op in a
+tool that edits the ledger is worse than a crash, because the ledger's whole value is that it
+records what actually happened.
+
+---
+
 ## Template
 
 ```markdown
