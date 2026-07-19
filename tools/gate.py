@@ -20,6 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import check_attribution
 import check_manifest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -91,6 +92,29 @@ def stage_manifest(root: Path) -> bool:
     return report.ok
 
 
+def stage_attribution(root: Path) -> bool:
+    """Scan the full history for AI authorship, in process. Section 4.3.
+
+    Run here rather than by subprocess so that `scan_authorship_metadata` is
+    invoked from the gate's real path. Operator ruling R-006: certifying tests
+    prove behaviour, they do not supply call sites, and the honest invoker of a
+    metadata scan is the gate that runs it.
+    """
+    try:
+        commits = check_attribution.read_history(root)
+    except check_attribution.AttributionError_ as exc:
+        print(f"    REFUSED TO RUN: {exc}", file=sys.stderr)
+        return False
+
+    findings = check_attribution.scan_authorship_metadata(commits)
+    findings.extend(check_attribution.scan_tracked_paths(root))
+    for finding in findings:
+        print(f"    {finding}", file=sys.stderr)
+    if not findings:
+        print(f"    clean over {len(commits)} record(s)")
+    return not findings
+
+
 def _script_stage(script: str) -> Callable[[Path], bool]:
     def run(root: Path) -> bool:
         target = root / script
@@ -115,7 +139,7 @@ STAGES: list[Stage] = [
     Stage("stubs", _script_stage("tools/check_no_stubs.py")),
     Stage("spec-isolation", _script_stage("tools/check_spec_isolation.py")),
     Stage("imports", _script_stage("tools/check_import_graph.py")),
-    Stage("attribution", _script_stage("tools/check_attribution.py")),
+    Stage("attribution", stage_attribution),
     Stage("fixtures", _script_stage("tools/check_fixture_provenance.py")),
     Stage("substrate-purity", _script_stage("tools/check_substrate_purity.py")),
 ]

@@ -1,0 +1,15 @@
+# Negative control. Clean authorship throughout.
+
+sha: 4444444444444444444444444444444444444444
+author: Vaunox
+author_email: nevesia26@gmail.com
+committer: Vaunox
+committer_email: nevesia26@gmail.com
+trailers:
+
+sha: 5555555555555555555555555555555555555555
+author: Vaunox
+author_email: nevesia26@gmail.com
+committer: Vaunox
+committer_email: nevesia26@gmail.com
+trailers: Signed-off-by: Vaunox <nevesia26@gmail.com>

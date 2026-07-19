@@ -1,0 +1,25 @@
+# Planted violations for check_attribution. Fixture data.
+# One block per commit record, in the same shape parse_git_history produces.
+# Every defect here is in a METADATA field. None is in a file body, because
+# file bodies are not this checker's business (section 4.3, DE-000l).
+
+sha: 1111111111111111111111111111111111111111
+author: Vaunox
+author_email: nevesia26@gmail.com
+committer: Vaunox
+committer_email: nevesia26@gmail.com
+trailers: Co-Authored-By: Claude <noreply@anthropic.com>
+
+sha: 2222222222222222222222222222222222222222
+author: Vaunox
+author_email: nevesia26@gmail.com
+committer: Vaunox
+committer_email: nevesia26@gmail.com
+trailers: Generated with an assistant
+
+sha: 3333333333333333333333333333333333333333
+author: Claude
+author_email: bot@anthropic.com
+committer: Vaunox
+committer_email: nevesia26@gmail.com
+trailers:

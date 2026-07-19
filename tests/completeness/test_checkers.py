@@ -21,6 +21,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import check_attribution
 import check_import_graph
 import check_manifest
 import check_no_stubs
@@ -582,3 +583,85 @@ def test_import_graph_package_is_inside_its_own_boundary() -> None:
     assert check_import_graph.matches("lab.ledger", ["lab.ledger.*"])
     assert check_import_graph.matches("lab.ledger.chain", ["lab.ledger.*"])
     assert not check_import_graph.matches("lab.engines.equity_daily", ["lab.ledger.*"])
+
+
+# --------------------------------------------------------------------------
+# check_attribution
+# --------------------------------------------------------------------------
+
+
+def test_attribution_rejects_trailer_in_history() -> None:
+    """Section 4.3: a Co-Authored-By trailer, and an author who is not the operator.
+
+    Three routes are asserted rather than one, because a checker that caught
+    only the trailer would leave the author-identity route open -- and in a
+    public history one missed commit is permanent.
+    """
+    report = check_attribution.check(FIXTURE_ROOT / "attribution")
+
+    assert not report.ok
+    joined = "\n".join(report.findings)
+    assert "Co-Authored-By" in joined
+    assert "generated with" in joined.lower()
+    assert any("author name" in f for f in report.findings), report.findings
+
+
+def test_attribution_ignores_file_contents() -> None:
+    """Failure case 7, and the whole of DE-000l.
+
+    The clean fixture contains a Python file whose body carries `anthropic`,
+    `Claude` and `Generated with`. It must pass. A checker that greps contents
+    can never pass -- `.gitignore` must contain the literal CLAUDE.md, and no
+    exclusion list survives the next legitimate mention.
+
+    The word is topic. The metadata is attribution. This test is the difference.
+    """
+    fixture = FIXTURE_ROOT / "attribution_clean"
+    body = (fixture / "topic_not_attribution.py").read_text(encoding="utf-8")
+
+    assert "anthropic" in body.lower(), "the control is vacuous without the word present"
+    assert "generated with" in body.lower()
+
+    report = check_attribution.check(fixture)
+
+    assert report.ok, f"drifted back into scanning contents: {report.findings}"
+
+
+def test_attribution_clean_over_the_full_real_history() -> None:
+    """Section 12's completeness gate, and the only test of the git-reading path.
+
+    The planted fixture exercises the judge. This exercises acquisition: real
+    `git log` output, really parsed, over every commit this repository has. A
+    checker proven only against its fixture has proven only its fixture.
+    """
+    report = check_attribution.check(REPO_ROOT)
+
+    assert report.ok, report.findings
+    assert report.commits_scanned > 0, "no history was read; the pass is vacuous"
+
+
+def test_attribution_reads_real_git_history_not_the_fixture_seam() -> None:
+    """The injection seam is unreachable wherever a `.git` exists.
+
+    Otherwise dropping a FIXTURE_GIT_LOG beside the checker would launder the
+    history, which is precisely the bypass this tool exists to prevent.
+    """
+    commits = check_attribution.read_history(REPO_ROOT)
+
+    assert commits
+    assert all(len(c.sha) >= 12 for c in commits)
+    assert any(c.author_name for c in commits)
+
+
+def test_attribution_refuses_a_tree_with_no_history(tmp_path: Path) -> None:
+    """No history is not a clean history."""
+    with pytest.raises(check_attribution.AttributionError_):
+        check_attribution.check(tmp_path)
+
+
+def test_attribution_rejects_a_tracked_claude_config() -> None:
+    """Section 4.4: a committed tool config is the loudest signature there is."""
+    findings = check_attribution.scan_tracked_paths(REPO_ROOT)
+
+    assert findings == [], findings
+    assert "CLAUDE.md" in (REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
