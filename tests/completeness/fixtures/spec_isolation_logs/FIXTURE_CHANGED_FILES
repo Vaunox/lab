@@ -1,0 +1,8 @@
+HANDOFF.md
+DEAD_ENDS.md
+PROJECT_STATE.md
+DIVERGENCES.md
+DEFERRALS.md
+src/lab/core/config.py
+tools/gate.py
+tests/unit/core/test_config.py
