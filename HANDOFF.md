@@ -99,7 +99,24 @@ yet**, so it is not certified, only observed.
 
 ## What to do next
 
-**Build the remaining checkers before the code they police (§2). 19 rows open.**
+### `[OPERATOR]` R-007 — the order for the next session. Follow it.
+
+1. **`test_every_checker_rejects_its_fixture` + the fixture harness, before any third checker.**
+   Establish the planted-violation pattern **once**, so every later checker inherits it. This also
+   creates `tests/`, which clears the `types` and `tests` red stages as a side effect.
+2. **Retrofit planted violations for the checkers already built** (`check_manifest`, `gate`) so
+   **nothing stays `[ASSERTED]` longer than one session.**
+   > **No checker is `[VERIFIED]` until it rejects its fixture.**
+3. **Then the remaining checkers in dependency order — each landing with its fixture and its
+   rejection test in the same step. Never a checker without its proof-of-failure.**
+
+*Why this order and not "finish the checkers first": two checkers currently exist and neither has
+any proof it can fail, which is the precise state §2.2 calls worse than no checker at all, because
+it manufactures confidence. Writing a third would compound that. The harness is the exit from it.*
+
+---
+
+**Then continue: build the remaining checkers before the code they police (§2). 18 rows open.**
 
 1. `tools/check_no_stubs.py` (+`is_protocol_member`, +`resolve_deferral_marker`) — the `Protocol`
    exception (§7.2) is real: a `...` body is legal **iff** the enclosing class inherits `Protocol`.
