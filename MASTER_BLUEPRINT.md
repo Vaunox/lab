@@ -671,13 +671,14 @@ Small N of users chosen for their willingness to say the machine is wrong. Publi
 
 Updated at the end of every session. Tracks **criteria met, not days elapsed** — there is no schedule here by design.
 
-**Gate status:** G0 ☐ · G1 ☐ · G2 ☐ · G3 ☐ · G4 ☐ · **G5 (kill gate)** ☐ · G6 ☐ · G7 ☐ · G8 (red team) ☐ · G9 ☐
+**Gate status:** G0 ☑ · G1 ☐ · G2 ☐ · G3 ☐ · G4 ☐ · **G5 (kill gate)** ☐ · G6 ☐ · G7 ☐ · G8 (red team) ☐ · G9 ☐
 
 **Deferrals open:** must be **0** at every phase exit.
 
 | Date | Phase | What moved | What broke |
 |---|---|---|---|
 | — | P0 | Governance ratified; blueprint written | — |
+| 2026-07-19 | P0 | **GATE 0 MET.** Tagged `gate-0-scaffold`. The enforcement machinery is built and passes on itself: seven checkers, each with a planted violation and a negative control; 32/32 manifest rows; 93 tests; CI green on three platforms. | The §5.4 bootstrap exception has self-closed — §11.1 binds absolutely from here. Six manifest rows reclassified `required` → `n/a` by amendment A-004; their consumers arrive in P1. |
 
 ---
 

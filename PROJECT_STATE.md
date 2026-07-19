@@ -11,7 +11,14 @@ Tracks **criteria met**, not days elapsed. There is no schedule here by design
 
 **P1 — Substrate: ledger, clock, haircut**
 
-Status: not started
+Status: **not started.** Opens on `phase/p1-substrate`, cut from `main`.
+
+Previous phase **P0 is complete** — Gate 0 met, tagged `gate-0-scaffold`. A fresh clone of
+that tag reports `GATE GREEN -- 10 stages passed`. Archived handoff:
+`docs/handoff/P0_HANDOFF.md`.
+
+*(This header read "P1" while the board still read "P0 — not started". The board was right and
+the header was aspirational. They now agree, and the header is true for the first time.)*
 
 ---
 
@@ -19,8 +26,8 @@ Status: not started
 
 | Phase | Gate | Status |
 |---|---|---|
-| P0 — Repo, remote, enforcement machinery | self-bootstrap | not started |
-| P1 — Substrate: ledger, clock, haircut | — | not started |
+| P0 — Repo, remote, enforcement machinery | self-bootstrap | **done** — G0 met, tagged `gate-0-scaffold` |
+| P1 — Substrate: ledger, clock, haircut | **GATE 1** | **current** — not started |
 | P2 — Cost kernel | — | not started |
 | P3 — Data plane | random null + **LLM null** + power | not started |
 | P4 — Engine A: daily cross-sectional | **GATE 1** | not started |
@@ -90,3 +97,5 @@ re-litigated, it belongs in the CONSTITUTION amendment log instead.
 | Date | Phase | What moved | What broke |
 |---|---|---|---|
 | — | P0 | Constitution, acceptance criteria, contracts, playbook ratified | — |
+| 2026-07-18 | P0 | Bootstrap: repo, public remote, protected `main`, phase branch. `gate.py` and `check_manifest.py` built. | Gate red — no certifying test existed for either checker. |
+| 2026-07-19 | P0 | **Gate 0 met.** All seven checkers built, each with a planted violation and a negative control. 32/32 manifest rows, 93 tests, CI green on ubuntu/windows/macos. PR #1 and #2 merged, `gate-0-scaffold` tagged. | Six `call_site: required` rows had no honest caller — resolved by operator ruling as amendment A-004, not by manufacturing callers. First CI run caught two environment-shaped defects invisible locally (DE-004, DE-005). Merging PR #1 closed the §5.4 exception and falsified two tests that had asserted it was open (DE-006). |
