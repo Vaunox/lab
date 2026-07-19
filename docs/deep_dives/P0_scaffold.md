@@ -569,21 +569,21 @@ rows:
     artifact: lab.core.config.load_config
     kind: function
     spec: "§5"
-    call_site: required
+    call_site: n/a
     certifying_test: tests/unit/core/test_config.py::test_layered_override
 
   - id: P0.SECRETS
     artifact: lab.core.config.get_secret
     kind: function
     spec: "§5"
-    call_site: required
+    call_site: n/a
     certifying_test: tests/unit/core/test_config.py::test_missing_secret_raises
 
   - id: P0.LOGGING
     artifact: lab.core.logging.configure
     kind: function
     spec: "§5"
-    call_site: required
+    call_site: n/a
     certifying_test: tests/unit/core/test_logging.py::test_structured_and_redacted
 
   # ---- the seven checkers ----
@@ -626,14 +626,14 @@ rows:
     artifact: tools.check_no_stubs.is_protocol_member
     kind: function
     spec: "§7.2"
-    call_site: required
+    call_site: n/a
     certifying_test: tests/completeness/test_checkers.py::test_stubs_allows_protocol_ellipsis
 
   - id: P0.CHK.STUBS.DEFERRAL
     artifact: tools.check_no_stubs.resolve_deferral_marker
     kind: function
     spec: "§7.3"
-    call_site: required
+    call_site: n/a
     certifying_test: tests/completeness/test_checkers.py::test_stubs_rejects_unregistered_marker
 
   - id: P0.CHK.SPEC
@@ -647,7 +647,7 @@ rows:
     artifact: tools.check_spec_isolation.LOG_PATHS
     kind: constant
     spec: "§8"
-    call_site: required
+    call_site: n/a
     certifying_test: tests/completeness/test_checkers.py::test_spec_isolation_allows_handoff_with_code
 
   - id: P0.CHK.IMPORTS
@@ -734,6 +734,9 @@ Tag `gate-0-scaffold`. The tag commit contains the complete deliverables.
 | 2026-07-18 | §11 | `P0.BOOT.PREFLIGHT`: `call_site: required` → `call_site: n/a` | `[OPERATOR]` A-001. No tracked file can honestly invoke `tools/preflight.py`. §5.1 enumerates the gate's stages exhaustively and preflight is not among them; §6.3 excludes the row's own certifying test; and §12's bootstrap gate already treats preflight as documentary evidence (*"Preflight passed, or the operator was told to run `gh auth login` and did"*). Preflight is a one-time session-0 script run by hand, and wiring it into `gate.py` or `ci.yml` to satisfy the field would fail on runners without `gh auth`, breaking the gate for outside contributors on a public repo — a call site manufactured to satisfy a checker, which is §2.2 inverted. Its three bootstrap siblings (`P0.BOOT.GIT`, `.REMOTE`, `.PROTECTION`) are all `n/a` for the same reason: their invoker is external to the repository. **`test_preflight_stops_on_missing_gh_auth` still ships and must pass** — `n/a` removes the external-caller requirement, not the test. |
 | 2026-07-18 | §6.2 | Add `type` to the kind registry, resolved by the same AST walk. State that the registry is closed and an unrecognised kind is a hard error. | `[OPERATOR]` A-002. Contradiction between two frozen specs: P1's frozen manifest uses `kind: type` six times (`lab.core.types.Paise`, `AsOf`, `DateRange`, `lab.ledger.schema.TrialDraft`, `TrialResult`, `lab.ledger.seal.SealToken`), which a checker written strictly to §6.2 would refuse on day one of P1. Resolved in favour of the document that already shipped the usage. Fail-closed behaviour is preserved and made explicit: unknown kinds do not pass leniently, because an open-ended kind field is where a stub hides. |
 | 2026-07-18 | §1, §5, §11, §12 | "six checkers" → "seven" (4 occurrences) | `[OPERATOR]` A-003. Stale prose count. The manifest enumerates **seven** checker scripts — manifest, stubs, spec-isolation, imports, fixtures, substrate-purity, attribution — and §9.2b states `check_substrate_purity.py` *"Ships in P0."* The §11 occurrence was a YAML section comment reading `# ---- the six checkers ----` directly above seven rows. Left uncorrected, a builder reading "six" ships `check_substrate_purity.py` **without a planted violation**, which is failure case 15 — the one §10 calls *"the one that matters."* The §12 edit raises the correctness gate from six planted violations to seven: strictly tightening, a ratchet in the safe direction. |
+
+| 2026-07-19 | §11 | `call_site: required` → `call_site: n/a` on six rows: `P0.CONFIG`, `P0.SECRETS`, `P0.LOGGING`, `P0.CHK.STUBS.PROTOCOL`, `P0.CHK.STUBS.DEFERRAL`, `P0.CHK.SPEC.LOGS` | `[OPERATOR]` A-004, resolving Q-003. Six rows asserted a call-site relationship P0's own design cannot honestly produce, and the gate was red on that alone — every row built, nothing stubbed. Same class as A-001, and resolved the same way. **Each row was tested against the guardrail before reclassification: `n/a` is for a symbol honestly complete without an in-phase external caller, never for a genuine orphan.** (a) **The three checker sub-symbols are not orphans.** `is_protocol_member` is invoked at `check_no_stubs.py:245` and `resolve_deferral_marker` at `:261`, both inside the scan loop on the real path every run; `LOG_PATHS` is read at `check_spec_isolation.py:109` inside `classify`. All three are certified by `test_stubs_allows_protocol_ellipsis`, `test_stubs_rejects_unregistered_marker` and `test_spec_isolation_allows_handoff_with_code`. *"Referenced outside its own module"* is the wrong bar for a checker's private predicate and its own constant — §6.3 exists to catch the orphaned primitive, and a per-node predicate called on every node is the opposite of orphaned. (b) **`lab.core.logging.configure` was checked for an honest caller first, as the ruling required, and does not have one.** Wiring `gate.py` to it was considered and **rejected as a fig leaf that would also be actively harmful**: the gate polices `lab`, so importing `lab` into the gate means a syntax error in `lab/core/logging.py` crashes the gate on import instead of being *reported* by it as a red stage — the judge losing the ability to report on the defendant. Blueprint §8's telescope is also per-*trial* ("correlation ID per trial") and the gate runs no trials, and §12.1 requires the gate's output be pasted verbatim as human-readable evidence, which structured JSON would degrade. (c) **`load_config` and `get_secret` have no P0 consumer** — the checkers are hardcoded by design and P0 ships no CLI and no engine. Consumers arrive in P1. No consumer was manufactured. **Nothing about the certifying tests changed; all six rows still exist and still pass them.** |
+| 2026-07-19 | §6 | `check_manifest.py` validates the `call_site` field against a closed set (`required`, `n/a`) | `[OPERATOR]` A-004, same ruling: *"`check_manifest` stays fail-closed on unrecognised `call_site` values — `n/a` is a classification, not a bypass."* The checker previously ran the call-site assertion only when the field read exactly `required` and silently ignored every other value, so a typo (`call-site`, `Required`, `na`) disabled the check with no signal. That is the vacuous pass §6.2 closes for `kind`, left open one field over. An unrecognised `call_site` is now a hard error, exactly as an unrecognised `kind` is. |
 
 **Amendment procedure followed:** §10.5 — the deep dive is amended with a dated entry, and the
 manifest row is changed citing it. Applied on `phase/p0-scaffold` within the bootstrap PR, which

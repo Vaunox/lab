@@ -42,6 +42,14 @@ SYMBOL_KINDS = frozenset(
 )
 KNOWN_KINDS = SYMBOL_KINDS | {"file", "script", "infra"}
 
+# Section 6.3, closed for the same reason the kind registry is closed. The
+# call-site assertion used to run only when this field read exactly "required",
+# and every other value -- including a typo like "Required", "call-site" or "na"
+# -- silently disabled it. That is the vacuous pass section 6.2 closes for
+# `kind`, left open one field over. `n/a` is a classification, not a bypass: the
+# row still has to exist and still has to pass its certifying test.
+KNOWN_CALL_SITES = frozenset({"required", "n/a"})
+
 # Section 6.4: hardcoded and short. A configurable exempt list is a loophole with
 # a config file.
 #
@@ -183,13 +191,21 @@ def parse_rows(manifest: dict[str, Any]) -> list[Row]:
                 f"row {raw['id']}: unrecognised kind {kind!r}. The registry is "
                 f"closed; known kinds are {sorted(KNOWN_KINDS)}"
             )
+        call_site = str(raw.get("call_site", "n/a"))
+        if call_site not in KNOWN_CALL_SITES:
+            raise ManifestError(
+                f"row {raw['id']}: unrecognised call_site {call_site!r}. The "
+                f"registry is closed; known values are {sorted(KNOWN_CALL_SITES)}. "
+                "An unrecognised value would silently disable the call-site "
+                "assertion for this row"
+            )
         rows.append(
             Row(
                 id=str(raw["id"]),
                 artifact=str(raw["artifact"]),
                 kind=kind,
                 spec=str(raw["spec"]),
-                call_site=str(raw.get("call_site", "n/a")),
+                call_site=call_site,
                 certifying_test=str(raw.get("certifying_test", "")),
             )
         )
