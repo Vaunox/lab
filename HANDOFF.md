@@ -211,6 +211,8 @@ piped here, as output. Typed status is a claim; piped status is evidence.*
 **Captured at:** commit `4e474adbec3b68d4ba47fee24cb347b164050ece`
 **Command:** `gh api "repos/Vaunox/lab/branches/main/protection"`
 
+<!-- piped_gh_api_output -->
+
 ```json
 {
     "url": "https://api.github.com/repos/Vaunox/lab/branches/main/protection",

@@ -1,0 +1,35 @@
+# Deep dive P0 section 5. The two local hooks are the same scripts tools/gate.py
+# runs; pre-commit catches them before the commit exists, the gate catches them
+# before the merge does.
+exclude: ^tests/completeness/fixtures/
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.20
+    hooks:
+      - id: ruff
+
+  - repo: https://github.com/psf/black
+    rev: 26.5.1
+    hooks:
+      - id: black
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v2.2.0
+    hooks:
+      - id: mypy
+        additional_dependencies: ["types-PyYAML"]
+
+  - repo: local
+    hooks:
+      - id: check-no-stubs
+        name: no stubs, no deferral language
+        entry: python tools/check_no_stubs.py
+        language: system
+        pass_filenames: false
+
+      - id: check-attribution
+        name: no AI authorship in commit metadata
+        entry: python tools/check_attribution.py
+        language: system
+        pass_filenames: false

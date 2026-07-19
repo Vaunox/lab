@@ -1,0 +1,76 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lab"
+version = "0.0.0"
+description = "A research kernel for systematic strategies on Indian cash equity."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+classifiers = [
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3.11",
+  "Typing :: Typed",
+]
+dependencies = [
+  "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8",
+  "mypy>=1.8",
+  "ruff>=0.5",
+  "black>=24",
+  "mutmut>=2.4",
+  "types-PyYAML",
+]
+
+[project.urls]
+Source = "https://github.com/Vaunox/lab"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lab"]
+
+# mypy runs strict, and not "strict where convenient" -- the substrate's
+# correctness argument leans on types, and a partially-typed substrate has the
+# appearance of that argument without the substance. Deep dive P0 section 5.
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src", "tools", "tests"]
+warn_unreachable = true
+warn_unused_configs = true
+show_error_codes = true
+
+# The planted-violation fixtures are deliberately broken trees fed to the
+# checkers. They are data, not source, and must not be type-checked or linted.
+[[tool.mypy.overrides]]
+module = "tests.completeness.fixtures.*"
+ignore_errors = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["tests/completeness/fixtures"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "PT", "SIM", "RUF"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+extend-exclude = "tests/completeness/fixtures"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+
+# Mutation score >= 90% on substrate modules (blueprint section 9.8). Runs on
+# gate PRs and nightly, never inside tools/gate.py -- it is slow, and a gate the
+# operator will not wait for is a gate the operator does not run.
+[tool.mutmut]
+paths_to_mutate = "src/lab/"
+tests_dir = "tests/"
