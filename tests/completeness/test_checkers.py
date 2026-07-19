@@ -21,6 +21,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import check_import_graph
 import check_manifest
 import check_no_stubs
 import check_spec_isolation
@@ -497,3 +498,87 @@ def test_spec_isolation_refuses_a_tree_with_no_diff_to_judge(tmp_path: Path) -> 
     """No diff is not a clean diff."""
     with pytest.raises(check_spec_isolation.SpecIsolationError):
         check_spec_isolation.check(tmp_path)
+
+
+# --------------------------------------------------------------------------
+# check_import_graph
+# --------------------------------------------------------------------------
+
+
+def test_import_graph_rejects_violation() -> None:
+    """An engine importing shared truth, and minting a result it may not mint.
+
+    The ledger's own construction of `TrialResult` must be absent from the
+    findings. Without that assertion the test is satisfied by a checker that
+    flags the symbol everywhere -- which rejects the planted tree for the wrong
+    reason, and turns a boundary into a blanket ban.
+    """
+    report = check_import_graph.check(FIXTURE_ROOT / "imports")
+
+    assert not report.ok
+    messages = [v.message for v in report.violations]
+    assert any("constructs TrialResult" in m for m in messages), messages
+    assert any("imports lab.costs.schedule" in m for m in messages), messages
+    assert not any("lab.ledger.chain" in m for m in messages), messages
+
+
+def test_import_graph_accepts_a_tree_that_obeys_the_same_rules() -> None:
+    """The negative control, under the identical rules file."""
+    report = check_import_graph.check(FIXTURE_ROOT / "imports_clean")
+
+    assert report.ok, [v.message for v in report.violations]
+    assert report.rules_applied == 2, "the control is vacuous if no rule was loaded"
+    assert report.modules_scanned == 2
+
+
+def test_import_graph_prints_reason_on_failure(capsys: pytest.CaptureFixture[str]) -> None:
+    """Section 9.1: the reason reaches the output, not just the rule file.
+
+    A message reading only "import rule violated" teaches the next agent
+    nothing, and it will route around it. This asserts on stderr rather than on
+    the report object because what the agent reads is the output.
+    """
+    exit_code = check_import_graph.main(["--root", str(FIXTURE_ROOT / "imports")])
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert "The engine cannot mint a result. Only the ledger can." in captured.err
+    assert "Engines may duplicate logic. Engines may never duplicate truth." in captured.err
+
+
+def test_import_graph_refuses_a_rule_with_no_reason(tmp_path: Path) -> None:
+    """A rule that cannot explain itself is refused at load, not enforced quietly."""
+    rules = tmp_path / "import_rules.yaml"
+    rules.write_text(
+        '- symbol: TrialResult\n  constructed_only_in: ["lab.ledger.*"]\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(check_import_graph.ImportRuleError, match="reason"):
+        check_import_graph.load_rules(rules)
+
+
+def test_import_graph_refuses_an_unrecognised_rule_shape(tmp_path: Path) -> None:
+    """The rule registry is closed. An unknown shape is a hard error, never a skip."""
+    rules = tmp_path / "import_rules.yaml"
+    rules.write_text('- thing: TrialResult\n  reason: "because"\n', encoding="utf-8")
+
+    with pytest.raises(check_import_graph.ImportRuleError):
+        check_import_graph.load_rules(rules)
+
+
+def test_import_graph_ships_a_rules_file_that_loads() -> None:
+    """P0's own rules file is valid and deliberately empty of `lab.*` rules."""
+    assert check_import_graph.load_rules(REPO_ROOT / "tools" / "import_rules.yaml") == []
+
+
+def test_import_graph_package_is_inside_its_own_boundary() -> None:
+    """`lab.ledger.*` admits `lab.ledger` itself.
+
+    Read strictly, the pattern would forbid `lab/ledger/__init__.py` from
+    touching the symbol the ledger exists to own -- a rule whose first violation
+    is its own author.
+    """
+    assert check_import_graph.matches("lab.ledger", ["lab.ledger.*"])
+    assert check_import_graph.matches("lab.ledger.chain", ["lab.ledger.*"])
+    assert not check_import_graph.matches("lab.engines.equity_daily", ["lab.ledger.*"])
