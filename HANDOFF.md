@@ -211,12 +211,53 @@ directly.*
 
 ## Last `python tools/gate.py`
 
+**Run at:** 2026-07-18 · **Commit:** `13a1178` · **Exit code:** `1`
+
+Stage banners and verdict, piped verbatim. The per-stage failure detail (57 manifest failures and
+the missing-checker lines) is on stderr and is reproduced in full by re-running the command.
+
 ```
-(not yet run — tools/gate.py does not exist; P0.GATE not built)
+=== lint ===
+--- lint: ok
+=== types ===
+--- types: FAILED
+=== tests ===
+--- tests: FAILED
+=== manifest ===
+phase:                        P0
+rows total:                   32
+rows built:                   14
+rows open:                    18
+spec sections without a row:  0
+rows without a spec section:  0
+failures:                     57
+--- manifest: FAILED
+=== stubs ===
+--- stubs: FAILED
+=== spec-isolation ===
+--- spec-isolation: FAILED
+=== imports ===
+--- imports: FAILED
+=== attribution ===
+--- attribution: FAILED
+=== fixtures ===
+--- fixtures: FAILED
+=== substrate-purity ===
+--- substrate-purity: FAILED
+
+============================================================
+GATE RED -- failed stages: types, tests, manifest, stubs, spec-isolation, imports, attribution, fixtures, substrate-purity
 ```
 
-**Run at:** —
-**Commit:** —
+**Every red stage is unbuilt work, not a defect.** `types` fails because `mypy` is configured over
+`tests`, which does not exist. `tests` fails because no test exists. The six checker stages fail
+because their scripts are not written — `gate.py` reports a missing checker as a **failure, never a
+skip**, which is the same fail-closed discipline as the empty registry.
+
+`[VERIFIED]` **`gate.py` fails closed on zero registered checkers** — `run_gate(root, [])` raises
+`EmptyRegistryError` rather than reporting success. Demonstrated directly this session; the
+certifying test `test_gate_fails_closed_on_zero_checkers` is **not yet written**, so the property is
+observed, not certified.
 
 ## Branch protection — `gh api` response, verbatim
 
@@ -324,15 +365,25 @@ every row cites a real section.
 
 | Check | Status |
 |---|---|
-| tests | — |
-| `check_manifest.py` | — |
-| `check_no_stubs.py` | — |
-| `check_spec_isolation.py` | — |
-| `check_fixture_provenance.py` | — |
-| `check_import_graph.py` | — |
-| `check_attribution.py` | — |
-| mutation ≥ 90% (substrate) | — |
-| `DEFERRALS.md` empty | ☑ (empty) |
+| lint (`ruff`) | ☑ passing |
+| format (`black`) | ☑ passing |
+| types (`mypy --strict`) | ☒ `tests/` does not exist |
+| tests | ☒ no test exists |
+| `tools/gate.py` | ☑ built · fails closed on zero checkers `[ASSERTED]` |
+| `check_manifest.py` | ☑ built · validates P0's own manifest `[ASSERTED]` |
+| `check_no_stubs.py` | ☒ not written |
+| `check_spec_isolation.py` | ☒ not written |
+| `check_import_graph.py` | ☒ not written |
+| `check_fixture_provenance.py` | ☒ not written |
+| `check_substrate_purity.py` | ☒ not written |
+| `check_attribution.py` | ☒ not written |
+| planted violations (7 required) | ☒ **none exist — §2.2, the highest-priority remaining work** |
+| mutation ≥ 90% (substrate) | — no substrate code in P0 |
+| `DEFERRALS.md` empty | ☑ (empty — and it stays empty; nothing was deferred) |
+
+**Not one certifying test exists.** Everything marked ☑ above is `[ASSERTED]`, observed by running
+it, never `[VERIFIED]`. Per §2.2 a checker with no proof it can fail is worse than no checker,
+because it manufactures confidence — and right now both built checkers are in exactly that state.
 
 ---
 
@@ -556,6 +607,32 @@ have not been started. The gate is red and there is no gate to run it with.
    endorsed the call as correct. Recorded as evidence so it is not re-litigated from memory.
 
 ### tools/gate.py
-```
-(not built — P0.GATE is row 7 of 12 in the remaining work; see What to do next)
-```
+Piped verbatim into *MACHINE STATE* above. `GATE RED`, exit 1, nine of ten stages failing —
+all of them unbuilt work, none a defect.
+
+### Addendum — operator ruling R-006
+
+- `[OPERATOR]` **R-006 — the three `check_manifest` sub-symbols are wired into `gate.py`'s real
+  call path**, not referenced from a non-certifying test. This **supersedes the `[BUILDER]`
+  decision recorded earlier this session**, which proposed the test-reference route and flagged it
+  as satisfying §6.3 "more in letter than spirit." The ruling: §9 DoD-(a) is about a genuine call
+  site, and the honest invoker of a manifest sub-check is the gate that runs it. **Certifying tests
+  prove behaviour; they do not supply call sites.** Implemented — `stage_manifest` calls
+  `assert_deep_dive_frozen`, `assert_called_outside_own_module`, and `assert_closed_loop` directly,
+  and the four `P0.CHK.MANIFEST*` rows now satisfy `call_site: required` through the gate.
+  Standing instruction attached: if a future sub-check has no honest place on the gate's real path,
+  **stop and surface it** — that is a signal the manifest decomposition is wrong, not something to
+  route around.
+
+  *Side benefit, not the reason:* running them as named stages means a manifest failure says which
+  of the four broke, instead of an opaque "manifest failed".
+
+### Addendum — what the next session must do first
+
+**`test_every_checker_rejects_its_fixture` and the seven planted violations.** §2.2, and the
+operator has named it the top priority twice. Two checkers now exist and **neither has any proof it
+can fail.** Build the fixture-and-rejection harness before writing a third checker, so the pattern
+is established once and every later checker inherits it.
+
+The `tests/` tree does not exist at all, which is why `mypy` and `pytest` both fail. Creating it
+turns three red stages green at once.
