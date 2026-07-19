@@ -91,7 +91,7 @@ class Report:
         return not self.findings
 
 
-class AttributionError_(RuntimeError):
+class HistoryUnavailableError(RuntimeError):
     """The checker cannot run. Distinct from the checker finding a violation."""
 
 
@@ -195,7 +195,7 @@ def read_history(root: Path) -> list[Commit]:
     if (root / ".git").exists():
         result = _git(root, "log", "--all", f"--format={GIT_LOG_FORMAT}")
         if result.returncode != 0:
-            raise AttributionError_(f"cannot read history in {root}: {result.stderr.strip()}")
+            raise HistoryUnavailableError(f"cannot read history in {root}: {result.stderr.strip()}")
         commits = parse_git_history(result.stdout)
 
         tags = _git(root, "for-each-ref", "--format=%(refname)%x1f%(taggername)%x1f%(taggeremail)")
@@ -219,7 +219,7 @@ def read_history(root: Path) -> list[Commit]:
 
     fixture = root / FIXTURE_HISTORY
     if not fixture.exists():
-        raise AttributionError_(
+        raise HistoryUnavailableError(
             f"{root} is not a git repository and carries no {FIXTURE_HISTORY}; "
             "there is no history to scan, and no history is not a clean history"
         )
@@ -260,7 +260,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         report = check(args.root)
-    except AttributionError_ as exc:
+    except HistoryUnavailableError as exc:
         print(f"check_attribution: REFUSED TO RUN: {exc}", file=sys.stderr)
         return 2
 
