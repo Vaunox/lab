@@ -1,0 +1,9 @@
+diff --git a/src/lab/ledger/chain.py b/src/lab/ledger/chain.py
+index 5555555..6666666 100644
+--- a/src/lab/ledger/chain.py
++++ b/src/lab/ledger/chain.py
+@@ -20,6 +20,8 @@ def append(row: dict) -> str:
+     payload = canonical_json(row)
++    if previous is None:
++        previous = GENESIS_HASH
+     return sha256(previous + payload)

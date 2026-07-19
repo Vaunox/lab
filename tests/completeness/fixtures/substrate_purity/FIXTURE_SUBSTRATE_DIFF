@@ -1,0 +1,18 @@
+diff --git a/src/lab/costs/schedule.py b/src/lab/costs/schedule.py
+index 1111111..2222222 100644
+--- a/src/lab/costs/schedule.py
++++ b/src/lab/costs/schedule.py
+@@ -10,6 +10,9 @@ def statutory_rate(turnover_paise: int, engine: object) -> int:
+     base = turnover_paise // 1000
++    if isinstance(engine, IntradayEngine):
++        return base // 10
++    if engine.engine_id == "equity-intraday":
++        return base // 10
+     return base
+diff --git a/src/lab/ledger/schema.py b/src/lab/ledger/schema.py
+index 3333333..4444444 100644
+--- a/src/lab/ledger/schema.py
++++ b/src/lab/ledger/schema.py
+@@ -4,3 +4,4 @@ class TrialResult:
+     net_paise: int
++    square_off_at: str | None = None
