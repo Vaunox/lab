@@ -1045,10 +1045,15 @@ def test_manifest_infra_rejects_a_hooks_path_pointing_elsewhere(tmp_path: Path) 
     hooks = tmp_path / ".githooks"
     hooks.mkdir()
     (hooks / "commit-msg").write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+    # The mode is staged and committed in one step, with no `-a`. On POSIX,
+    # `git commit -am` restages tracked files from the working tree, which
+    # reverts the `--chmod=+x` that was only ever staged -- leaving nothing to
+    # commit and a non-zero exit. Windows hides this entirely, because git
+    # ignores filesystem executable bits there, so the two-commit form passed
+    # locally and failed on both POSIX legs of the matrix.
     git("add", "-A")
-    git("commit", "-m", "chore: initial")
-    git("update-index", "--chmod=+x", ".githooks/commit-msg")
-    git("commit", "-am", "chore: mark the hook executable")
+    git("update-index", "--add", "--chmod=+x", ".githooks/commit-msg")
+    git("commit", "-m", "chore: initial, with the hook executable")
     git("config", "core.hooksPath", ".elsewhere")
 
     row = check_manifest.Row(
