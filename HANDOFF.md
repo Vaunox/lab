@@ -55,12 +55,14 @@ reason, and that reason is a finding for the operator rather than unbuilt work.
 
 ## The state in one paragraph
 
-All 32 manifest rows exist. All seven checkers are built, each with a planted violation
-**and** a negative control, and `test_every_checker_rejects_its_fixture` passes over all
-seven. Nine of the gate's ten stages are green. The tenth — `manifest` — reports exactly
-**six** failures, all of them the same failure: `call_site: required` on a symbol that has
-no honest caller anywhere in P0. **Nothing is stubbed. Nothing was skipped.** The six are
-listed under *Blocking questions*, and they need an operator ruling, not more code.
+**GATE GREEN. All ten stages pass. 32/32 manifest rows, 0 open, 0 failures, 90 tests.**
+All seven checkers are built, each with a planted violation **and** a negative control, and
+`test_every_checker_rejects_its_fixture` passes over all seven. Q-003 was ruled on by the
+operator mid-session and resolved as amendment **A-004** (see *Operator rulings*). Nothing is
+stubbed, nothing was skipped, and no call site was manufactured.
+
+**P0 is code-complete and its gate is green.** What remains is procedural: the phase PR is
+open and awaiting operator review, and the `gate-0-scaffold` tag is cut on merge.
 
 ## What is done
 
@@ -109,62 +111,35 @@ attribution · fixtures · substrate-purity. **88 tests pass.**
 
 *Nothing may proceed past these.*
 
-### Q-003 — `[OPEN]` **BLOCKING.** Six `call_site: required` rows have no honest caller.
-
-This is the single reason the gate is red. **Do not resolve it by writing a caller.** The
-Cold Start of Session 1 and operator ruling R-006 both anticipate exactly this and both say
-to surface it.
-
-| Row | Symbol | Why no honest caller exists |
+| # | Question | Blocks |
 |---|---|---|
-| `P0.CHK.STUBS.PROTOCOL` | `is_protocol_member` | An AST **node predicate**. The gate cannot call it; it is invoked per-node inside the scan loop. |
-| `P0.CHK.STUBS.DEFERRAL` | `resolve_deferral_marker` | Invoked per-stub during the scan. Not a stage. |
-| `P0.CHK.SPEC.LOGS` | `LOG_PATHS` | A **constant**. Nothing outside its module has a reason to read it. |
-| `P0.CONFIG` | `load_config` | P0 ships no CLI and no engine. |
-| `P0.SECRETS` | `get_secret` | Same. |
-| `P0.LOGGING` | `configure` | Same. |
+| — | None open. | — |
 
-**What was already tried and is NOT available:**
+**Q-003 — RESOLVED 2026-07-19** by operator ruling R-008, applied as spec amendment A-004.
+Six `call_site: required` rows asserted a relationship P0's design cannot honestly produce;
+all six are now `call_site: n/a`, each tested against the guardrail first. Full reasoning in
+`docs/deep_dives/P0_scaffold.md` §13. **The builder did not manufacture a caller while the
+question stood** — the gate was left red for the operator rather than made green by the one
+move the phase exists to refuse.
 
-- **R-006's remedy — call it from `gate.py`'s real path — was applied wherever it honestly
-  works.** `scan_authorship_metadata` (`P0.CHK.ATTRIB.SCOPE`) is now invoked in-process by
-  `stage_attribution`, and that row **passes**. The three checker sub-symbols above are not
-  stage-shaped, so the same move would be a manufactured caller.
-- **A second test module would satisfy §6.3 as literally written** — the rule's search space
-  is *"every AST in `src/` and `tools/`, and every test other than the row's
-  `certifying_test`"*. **R-006 explicitly superseded that route** ("certifying tests prove
-  behaviour; they do not supply call sites") and attached the standing instruction to stop
-  and surface instead.
-- **Manufacturing a caller for `lab.core.*` is forbidden in writing** by the Session 1 Cold
-  Start: *"Do not manufacture a fake caller to satisfy it; if no honest call site exists,
-  that is a finding to surface, not to paper over."*
-
-**The finding.** Six of P0's `call_site: required` fields assert a relationship P0's own
-design cannot produce. Three possible rulings, none of which the builder may pick:
-
-1. **Amend the manifest** (§10.5 procedure): these six become `call_site: n/a`, exactly as
-   A-001 did for `P0.BOOT.PREFLIGHT`, citing that their callers arrive in P1.
-2. **Rule that a non-certifying test is a valid call site** for node-level predicates and
-   constants, narrowing R-006 to stage-shaped symbols.
-3. **Rule that P0 exits with this stage red**, and the rows tick when P1 supplies callers.
-
-### Q-002 — `[OPEN]` **Non-blocking, but unresolvable by the builder.** `DIVERGENCES.md` defines no citable ID.
-
-§7.1 permits `@pytest.mark.skip`/`xfail` *"unless it cites a `DIVERGENCES.md` ID"*.
-`DIVERGENCES.md`'s Log table is keyed by Date/Gate/Fixture and **has no ID column**, so
-there is no ID for a marker to cite. Inventing an ID scheme is a spec decision.
-
-**Implemented meanwhile:** fail-closed — every skip/xfail is rejected, and the message says
-why. This is behaviourally identical under *every* candidate ID scheme, because with no IDs
-in the file no citation could resolve today. Inert in P0 (no skips exist). Only the
-resolution half changes once the operator rules.
+**Q-002 — DEFERRED 2026-07-19** by the same ruling. `DIVERGENCES.md` still defines no citable
+ID, and §7.1's skip exemption still has nothing to cite. Fail-closed stays; it binds on
+nothing in P0 (zero skips exist) and is behaviourally identical under every candidate scheme.
+**The ID scheme is decided by the first phase that actually needs a divergence-citing skip
+(P4/P5), and is not to be built speculatively now.**
 
 ## What to do next
 
-1. **Rule on Q-003.** The gate cannot go green without it, and no amount of building helps.
-2. Q-002, at leisure.
-3. Review D-004 and D-005 below.
-4. Then Gate 0's remaining bootstrap items: the phase PR, and the `gate-0-scaffold` tag.
+1. **The phase PR is open on `phase/p0-scaffold` and awaits operator review.** Do not merge
+   it yourself. §5.4: do not admin-bypass, and do not temporarily un-require the `gate`
+   check — doing either on the *first* merge sets the precedent for every merge after it.
+2. **The first CI run is the first real test of `ci.yml`.** No workflow has ever executed.
+   If the `gate` context does not appear exactly as named, D-007's reasoning about matrix
+   context naming is what to re-read first.
+3. On merge: tag `gate-0-scaffold`. §9.3 — the tag commit contains the complete deliverables.
+4. Then P1 opens against `docs/deep_dives/P1_substrate.md`. Its first act should be to give
+   `load_config`, `get_secret` and `configure` their real consumers, which is what A-004
+   recorded as arriving in P1.
 
 ## What you must NOT do
 
@@ -192,23 +167,18 @@ resolution half changes once the operator rules.
 
 ## Last `python tools/gate.py`
 
-**Run at:** 2026-07-19 · **Commit:** `9d90afa` · **Exit code:** `1`
+**Run at:** 2026-07-19 · **Commit:** `e77f098` · **Exit code:** `0`
 
-Piped verbatim. Nine of ten stages green; `manifest` red on six `call_site` rows and
-nothing else. Every row exists — `rows open: 0`.
+Piped verbatim, after amendment A-004. Ten of ten stages green. Subprocess output interleaves
+ahead of the stage banners because those subprocesses write straight to the terminal while
+Python's own stdout is block-buffered under redirection — an artifact of piping, not of order.
 
 ```
 All checks passed!
 Success: no issues found in 26 source files
-........................................................................ [ 81%]
-................                                                         [100%]
-88 passed in 2.14s
-    P0.CONFIG: lab.core.config.load_config is never referenced outside its own module and certifying test. Definition is not use (section 6.3)
-    P0.SECRETS: lab.core.config.get_secret is never referenced outside its own module and certifying test. Definition is not use (section 6.3)
-    P0.LOGGING: lab.core.logging.configure is never referenced outside its own module and certifying test. Definition is not use (section 6.3)
-    P0.CHK.STUBS.PROTOCOL: tools.check_no_stubs.is_protocol_member is never referenced outside its own module and certifying test. Definition is not use (section 6.3)
-    P0.CHK.STUBS.DEFERRAL: tools.check_no_stubs.resolve_deferral_marker is never referenced outside its own module and certifying test. Definition is not use (section 6.3)
-    P0.CHK.SPEC.LOGS: tools.check_spec_isolation.LOG_PATHS is never referenced outside its own module and certifying test. Definition is not use (section 6.3)
+........................................................................ [ 80%]
+..................                                                       [100%]
+90 passed in 2.02s
 check_no_stubs: clean over 13 file(s)
 check_spec_isolation: spec and code both touched, permitted by the section 5.4 bootstrap exception -- no workflow on origin/main produces the 'gate' check yet. This exception closes itself the moment one does.
 check_import_graph: clean -- 0 rule(s) over 4 module(s)
@@ -231,8 +201,8 @@ rows built:                   32
 rows open:                    0
 spec sections without a row:  0
 rows without a spec section:  0
-failures:                     6
---- manifest: FAILED
+failures:                     0
+--- manifest: ok
 
 === stubs ===
 --- stubs: ok
@@ -244,7 +214,7 @@ failures:                     6
 --- imports: ok
 
 === attribution ===
-    clean over 17 record(s)
+    clean over 18 record(s)
 --- attribution: ok
 
 === fixtures ===
@@ -254,23 +224,17 @@ failures:                     6
 --- substrate-purity: ok
 
 ============================================================
-GATE RED -- failed stages: manifest
+GATE GREEN -- 10 stages passed
 ```
 
-**The six manifest failures, verbatim:**
+**Read the tally, not the prose:** `rows built: 32`, `rows open: 0`, `failures: 0`, `spec
+sections without a row: 0`, `rows without a spec section: 0`.
 
-```
-P0.CONFIG: lab.core.config.load_config is never referenced outside its own module and certifying test. Definition is not use (section 6.3)
-P0.SECRETS: lab.core.config.get_secret is never referenced outside its own module and certifying test. Definition is not use (section 6.3)
-P0.LOGGING: lab.core.logging.configure is never referenced outside its own module and certifying test. Definition is not use (section 6.3)
-P0.CHK.STUBS.PROTOCOL: tools.check_no_stubs.is_protocol_member is never referenced outside its own module and certifying test. Definition is not use (section 6.3)
-P0.CHK.STUBS.DEFERRAL: tools.check_no_stubs.resolve_deferral_marker is never referenced outside its own module and certifying test. Definition is not use (section 6.3)
-P0.CHK.SPEC.LOGS: tools.check_spec_isolation.LOG_PATHS is never referenced outside its own module and certifying test. Definition is not use (section 6.3)
-```
-
-**Read the tally, not the prose:** `rows built: 32`, `rows open: 0`, `spec sections without
-a row: 0`, `rows without a spec section: 0`. The phase is *built*. It is not *cleared*,
-because six rows assert a call-site relationship P0 cannot honestly supply — Q-003.
+**The prior red is preserved in the Session 2 log below, deliberately.** The gate was red on
+six `call_site` rows for the whole of the build, and it went green because the *operator*
+amended the spec — not because the builder found a way to satisfy it. That distinction is the
+entire subject of §11, and a ledger that overwrote the red would have erased the evidence of
+the one thing worth proving.
 
 ## Branch protection — `gh api` response, verbatim
 
@@ -352,7 +316,7 @@ that supplies the check it must satisfy.
 
 *Generated by `check_manifest.py`. Never hand-counted.*
 
-**Run at:** 2026-07-19 · **Commit:** `9d90afa` · **Command:** `python tools/check_manifest.py`
+**Run at:** 2026-07-19 · **Commit:** `e77f098` · **Command:** `python tools/check_manifest.py`
 
 ```
 phase:                        P0
@@ -361,7 +325,7 @@ rows built:                   32
 rows open:                    0
 spec sections without a row:  0
 rows without a spec section:  0
-failures:                     6
+failures:                     0
 ```
 
 **The closed loop closes in both directions** — this is the self-bootstrap (§2.1) working:
@@ -789,3 +753,40 @@ control, and certifying tests: `check_no_stubs`, `check_spec_isolation`,
 
 Piped verbatim into *MACHINE STATE* above. `GATE RED`, exit 1, one failing stage, six
 failures, all Q-003.
+
+### Addendum — operator ruling R-008, and amendment A-004
+
+- `[OPERATOR]` **R-008 — Q-003 resolves as a §10.5 amendment, same class as A-001**, riding
+  the P0 phase PR (§5.4 / §11.3, the one PR permitted to carry spec and code together).
+
+  **Rejected by the operator:** exiting P0 with the stage red (unmergeable without an
+  admin-bypass or un-requiring the gate, both forbidden, and it would need an exception carved
+  into *"a branch may be partial, `main` may not"*); and treating a non-certifying test as a
+  call site as the sole remedy (addresses only three of the six, and reopens the
+  test-manufactures-a-caller pattern R-006 was ruled against).
+
+  **Adopted, refined:** for each of the six, prefer an honest design-intended call site if one
+  genuinely exists; reclassify `required` → `n/a` only where none does. With the guardrail:
+  **a genuine orphan — built but never wired, behaviour not actually certified — must NOT be
+  reclassified.** That is a real defect, to be fixed or surfaced.
+
+- **Applied.** All six were tested against the guardrail and none is an orphan. The three
+  checker sub-symbols are invoked on the real path every run (`check_no_stubs.py:245`, `:261`,
+  `check_spec_isolation.py:109`) and are certified. **`gate.py` was checked for an honest
+  logging call site, as the ruling required, and rejected it**: importing `lab` into the gate
+  means a syntax error in `lab/core/logging.py` crashes the gate instead of being *reported*
+  by it — the judge losing the ability to report on the defendant. `load_config` and
+  `get_secret` have no P0 consumer; none was manufactured.
+
+- **Second amendment in the same ruling:** `check_manifest` now validates `call_site` against
+  a closed set. It previously ran the assertion only on the exact string `required` and
+  **silently ignored every other value**, so a typo disabled the check with no signal — the
+  vacuous pass §6.2 closes for `kind`, left open one field over. Pinned by
+  `test_manifest_rejects_an_unrecognised_call_site` and
+  `test_manifest_call_site_registry_matches_the_frozen_manifest`.
+
+- **Result: `GATE GREEN -- 10 stages passed`, exit 0, 90 tests.** Piped verbatim above.
+
+- `[OPERATOR]` **Push authorized** for `phase/p0-scaffold`, after the amendment landed and the
+  gate went green, so the phase PR opens green rather than red. **Merge is not authorized** —
+  the PR opens and stops for operator review.

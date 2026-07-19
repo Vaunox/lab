@@ -954,3 +954,49 @@ def test_commit_msg_hook_uses_no_gnu_only_sed_extension() -> None:
     assert "sed -i" not in executable
     assert "/Id" not in executable
     assert "grep" in executable, "the portable implementation is missing entirely"
+
+
+def test_manifest_rejects_an_unrecognised_call_site(tmp_path: Path) -> None:
+    """Amendment A-004: the `call_site` registry is closed and fails closed.
+
+    Before A-004 the call-site assertion ran only when the field read exactly
+    `required`, and every other value silently disabled it -- so `Required`,
+    `call-site` or `na` turned the check off with no signal at all. That is the
+    vacuous pass section 6.2 closes for `kind`, left open one field over.
+
+    `n/a` is a classification, not a bypass: a row carrying it must still exist
+    and must still pass its certifying test, both of which are asserted by
+    `test_manifest_accepts_clean_tree`.
+    """
+    repo = _mini_repo(
+        tmp_path,
+        rows=(
+            "  - id: P9.TYPO\n"
+            "    artifact: DEFERRALS.md\n"
+            "    kind: file\n"
+            '    spec: "\u00a72"\n'
+            "    call_site: Required\n"
+            "    certifying_test: tests/planted_certifier.py::test_generated_row\n"
+        ),
+    )
+
+    with pytest.raises(check_manifest.ManifestError, match="call_site"):
+        check_manifest.check(repo)
+
+
+def test_manifest_call_site_registry_matches_the_frozen_manifest() -> None:
+    """Every value P0's manifest actually uses is inside the closed registry.
+
+    Derived from the spec rather than restated, so a future row carrying a new
+    classification fails here instead of being quietly ignored.
+    """
+    deep_dive = check_manifest.locate_deep_dive(REPO_ROOT, "P0")
+    rows = check_manifest.parse_rows(check_manifest.assert_deep_dive_frozen(deep_dive))
+
+    used = {row.call_site for row in rows}
+
+    assert used <= check_manifest.KNOWN_CALL_SITES
+    assert used == {"required", "n/a"}, (
+        "P0 should still exercise both classifications after A-004; if "
+        f"`required` has vanished entirely the registry is no longer tested: {used}"
+    )
